@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 
 const LoginScreen = () => {
-  const { login } = useAuth();
+  const { login, loginAsGuest } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,6 +33,21 @@ const LoginScreen = () => {
       const result = await login(email.trim(), password);
       if (!result.success) {
         Alert.alert('Login Failed', result.error || 'Invalid credentials');
+      }
+      // Navigation will be handled by AuthNavigator
+    } catch (error) {
+      Alert.alert('Error', 'An unexpected error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestLogin = async () => {
+    setLoading(true);
+    try {
+      const result = await loginAsGuest();
+      if (!result.success) {
+        Alert.alert('Error', result.error || 'Failed to login as guest');
       }
       // Navigation will be handled by AuthNavigator
     } catch (error) {
@@ -108,11 +123,28 @@ const LoginScreen = () => {
               </>
             )}
           </TouchableOpacity>
+
+          {/* Divider */}
+          <View style={styles.divider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>OR</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          {/* Guest Login Button */}
+          <TouchableOpacity
+            style={[styles.guestButton, loading && styles.guestButtonDisabled]}
+            onPress={handleGuestLogin}
+            disabled={loading}
+          >
+            <Ionicons name="person-outline" size={20} color={Colors.primary} />
+            <Text style={styles.guestButtonText}>Continue as Guest</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            For demo: Use admin credentials from your backend
+            Demo Mode: Enter any email/password to login instantly
           </Text>
         </View>
       </View>
@@ -195,6 +227,41 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textLight,
     textAlign: 'center',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: Spacing.lg,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.border,
+  },
+  dividerText: {
+    ...Typography.caption,
+    color: Colors.textSecondary,
+    marginHorizontal: Spacing.md,
+  },
+  guestButton: {
+    flexDirection: 'row',
+    backgroundColor: Colors.background,
+    borderWidth: 2,
+    borderColor: Colors.primary,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    ...Shadows.small,
+  },
+  guestButtonDisabled: {
+    opacity: 0.6,
+  },
+  guestButtonText: {
+    ...Typography.body,
+    color: Colors.primary,
+    fontWeight: '600',
   },
 });
 

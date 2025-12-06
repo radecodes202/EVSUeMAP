@@ -12,6 +12,7 @@ import { Colors, Spacing, Shadows } from '../constants/theme';
 
 // Utils
 import { calculateDistance, calculateWalkingTime } from '../utils/distance';
+import { calculateRoute as getRoute } from '../utils/routing';
 import { getErrorMessage } from '../utils/errorHandler';
 import { mockBuildings } from '../utils/mockData';
 
@@ -35,6 +36,13 @@ const MapScreen = ({ navigation, route }) => {
     console.log('MapScreen loaded');
     fetchBuildings();
     requestLocationPermission();
+    
+    // Center map on campus when component mounts
+    setTimeout(() => {
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
+      }
+    }, 500);
   }, []);
 
   // Handle navigation from Search screen
@@ -134,7 +142,7 @@ const MapScreen = ({ navigation, route }) => {
   };
 
   // Handle location selected from Search screen
-  const handleLocationFromSearch = (location) => {
+  const handleLocationFromSearch = async (location) => {
     console.log('Setting selected location:', location);
     setSelectedLocation(location);
     
@@ -150,29 +158,59 @@ const MapScreen = ({ navigation, route }) => {
 
     // Calculate route if user location is available
     if (userLocation) {
-      calculateRoute(userLocation, {
+      await calculateRoute(userLocation, {
         latitude: parseFloat(location.latitude),
         longitude: parseFloat(location.longitude),
       });
     }
   };
 
-  // Calculate route between two points
-  const calculateRoute = (start, end) => {
+  // Calculate route between two points using OSRM routing
+  const calculateRoute = async (start, end) => {
     console.log('Calculating route from', start, 'to', end);
     
-    // Simple straight-line route
-    setRouteCoordinates([start, end]);
-    
-    // Calculate distance and time
-    const distance = calculateDistance(start, end);
-    const timeMinutes = calculateWalkingTime(distance);
-    
-    Alert.alert(
-      'Route Calculated',
-      `Distance: ${distance.toFixed(2)} km\nEstimated time: ${timeMinutes} minutes walking`,
-      [{ text: 'OK' }]
-    );
+    try {
+      // Show loading indicator
+      setLoading(true);
+      
+      // Get route from OSRM (follows walkways and paths)
+      const routeData = await getRoute(start, end);
+      
+      if (routeData.success) {
+        setRouteCoordinates(routeData.coordinates);
+        
+        Alert.alert(
+          'Route Calculated',
+          `Distance: ${routeData.distance.toFixed(2)} km\nEstimated time: ${routeData.duration} minutes walking${routeData.isFallback ? '\n(Using approximate route)' : ''}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        // Fallback to straight line if routing fails
+        setRouteCoordinates([start, end]);
+        const distance = calculateDistance(start, end);
+        const timeMinutes = calculateWalkingTime(distance);
+        
+        Alert.alert(
+          'Route Calculated',
+          `Distance: ${distance.toFixed(2)} km\nEstimated time: ${timeMinutes} minutes walking\n(Using direct route)`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Route calculation error:', error);
+      // Fallback to straight line
+      setRouteCoordinates([start, end]);
+      const distance = calculateDistance(start, end);
+      const timeMinutes = calculateWalkingTime(distance);
+      
+      Alert.alert(
+        'Route Calculated',
+        `Distance: ${distance.toFixed(2)} km\nEstimated time: ${timeMinutes} minutes walking\n(Using direct route)`,
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Center map on user location
@@ -209,9 +247,9 @@ const MapScreen = ({ navigation, route }) => {
   };
 
   // Handle navigate button press
-  const handleNavigate = () => {
+  const handleNavigate = async () => {
     if (userLocation && selectedLocation) {
-      calculateRoute(userLocation, {
+      await calculateRoute(userLocation, {
         latitude: parseFloat(selectedLocation.latitude),
         longitude: parseFloat(selectedLocation.longitude),
       });
@@ -247,6 +285,13 @@ const MapScreen = ({ navigation, route }) => {
         provider={PROVIDER_DEFAULT}
         style={styles.map}
         initialRegion={EVSU_CENTER}
+        region={EVSU_CENTER}
+        onMapReady={() => {
+          // Ensure map is centered on campus when ready
+          if (mapRef.current) {
+            mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
+          }
+        }}
         showsUserLocation={true}
         showsMyLocationButton={false}
         showsCompass={true}

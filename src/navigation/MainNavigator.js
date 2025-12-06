@@ -1,24 +1,48 @@
 // src/navigation/MainNavigator.js - Main tab navigation
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, Alert } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { Colors } from '../constants/theme';
 
 // Import screens
 import MapScreen from '../screens/MapScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ChatbotScreen from '../screens/ChatbotScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
+import SettingsScreen from '../screens/SettingsScreen';
+import AboutScreen from '../screens/AboutScreen';
 
 const Tab = createBottomTabNavigator();
 
 const MainNavigator = () => {
-  const { logout } = useAuth(); // only needed if still using
+  const { logout, user } = useAuth();
+
+  // Logout handler with confirmation
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Logout',
+          style: 'destructive',
+          onPress: async () => {
+            await logout();
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <Tab.Navigator
-      screenOptions={({ route }) => ({
+      screenOptions={({ route, navigation }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
@@ -30,15 +54,19 @@ const MainNavigator = () => {
             iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           } else if (route.name === 'Favorites') {
             iconName = focused ? 'heart' : 'heart-outline';
+          } else if (route.name === 'Settings') {
+            iconName = focused ? 'settings' : 'settings-outline';
+          } else if (route.name === 'About') {
+            iconName = focused ? 'information-circle' : 'information-circle-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#4A90E2',
-        tabBarInactiveTintColor: '#808080',
+        tabBarActiveTintColor: Colors.primary,
+        tabBarInactiveTintColor: Colors.gray,
         headerShown: true,
         headerStyle: {
-          backgroundColor: '#4A90E2',
+          backgroundColor: Colors.primary,
           elevation: 0,
           shadowOpacity: 0,
         },
@@ -47,10 +75,24 @@ const MainNavigator = () => {
           fontWeight: 'bold',
           fontSize: 18,
         },
+        headerRight: () => (
+          <TouchableOpacity
+            onPress={handleLogout}
+            style={{ marginRight: 16, padding: 4 }}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="log-out-outline" size={24} color="#fff" />
+          </TouchableOpacity>
+        ),
         tabBarStyle: {
-          height: 60,
-          paddingBottom: 8,
+          height: 100,
+          paddingBottom: 12,
           paddingTop: 8,
+          elevation: 8,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -80,6 +122,11 @@ const MainNavigator = () => {
         name="Favorites" 
         component={FavoritesScreen}
         options={{ title: 'My Favorites' }}
+      />
+      <Tab.Screen 
+        name="Settings" 
+        component={SettingsScreen}
+        options={{ title: 'Settings' }}
       />
     </Tab.Navigator>
   );

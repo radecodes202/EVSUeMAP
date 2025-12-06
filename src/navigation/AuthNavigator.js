@@ -1,13 +1,15 @@
 // src/navigation/AuthNavigator.js - Navigation wrapper with authentication
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
+import { Colors } from '../constants/theme';
 import LoginScreen from '../screens/LoginScreen';
 import MainNavigator from './MainNavigator';
+import AboutScreen from '../screens/AboutScreen';
 import LoadingView from '../components/LoadingView';
 
-const Stack = createStackNavigator();
+const Stack = createNativeStackNavigator();
 
 const AuthNavigator = () => {
   const { isAuthenticated, loading } = useAuth();
@@ -22,7 +24,19 @@ const AuthNavigator = () => {
         {!isAuthenticated ? (
           <Stack.Screen name="Login" component={LoginScreen} />
         ) : (
-          <Stack.Screen name="Main" component={MainNavigator} />
+          <>
+            <Stack.Screen name="Main" component={MainNavigator} />
+            <Stack.Screen 
+              name="About" 
+              component={AboutScreen}
+              options={{
+                headerShown: true,
+                headerStyle: { backgroundColor: Colors.primary },
+                headerTintColor: '#fff',
+                headerTitle: 'About',
+              }}
+            />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>
@@ -30,4 +44,3 @@ const AuthNavigator = () => {
 };
 
 export default AuthNavigator;
-

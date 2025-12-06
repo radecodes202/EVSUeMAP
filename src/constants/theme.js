@@ -1,8 +1,8 @@
 // src/constants/theme.js - Theme and Color Constants
 
 export const Colors = {
-  primary: '#4A90E2',
-  primaryDark: '#357ABD',
+  primary: '#800020', // Maroon - EVSU primary color
+  primaryDark: '#5C0017', // Darker maroon for pressed/hover states
   secondary: '#FF5252',
   background: '#FFFFFF',
   backgroundLight: '#F5F5F5',

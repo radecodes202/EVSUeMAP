@@ -10,12 +10,11 @@ import MapScreen from '../screens/MapScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ChatbotScreen from '../screens/ChatbotScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
-import AdminScreen from '../screens/AdminScreen';
 
 const Tab = createBottomTabNavigator();
 
 const MainNavigator = () => {
-  const { isAdmin, logout } = useAuth();
+  const { logout } = useAuth(); // only needed if still using
 
   return (
     <Tab.Navigator
@@ -31,8 +30,6 @@ const MainNavigator = () => {
             iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
           } else if (route.name === 'Favorites') {
             iconName = focused ? 'heart' : 'heart-outline';
-          } else if (route.name === 'Admin') {
-            iconName = focused ? 'settings' : 'settings-outline';
           }
 
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -84,27 +81,6 @@ const MainNavigator = () => {
         component={FavoritesScreen}
         options={{ title: 'My Favorites' }}
       />
-      {isAdmin() && (
-        <Tab.Screen 
-          name="Admin" 
-          component={AdminScreen}
-          options={{ 
-            title: 'Admin',
-            headerRight: () => (
-              <TouchableOpacity
-                onPress={logout}
-                style={{ marginRight: 16, padding: 4 }}
-              >
-                <Ionicons 
-                  name="log-out-outline" 
-                  size={24} 
-                  color="#fff" 
-                />
-              </TouchableOpacity>
-            ),
-          }}
-        />
-      )}
     </Tab.Navigator>
   );
 };

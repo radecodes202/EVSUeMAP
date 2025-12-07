@@ -186,7 +186,7 @@ const MapScreen = ({ navigation, route }) => {
         );
       } else {
         // Fallback to straight line if routing fails
-        setRouteCoordinates([start, end]);
+    setRouteCoordinates([start, end]);
         const distance = calculateDistance(start, end);
         const timeMinutes = calculateWalkingTime(distance);
         
@@ -200,14 +200,14 @@ const MapScreen = ({ navigation, route }) => {
       console.error('Route calculation error:', error);
       // Fallback to straight line
       setRouteCoordinates([start, end]);
-      const distance = calculateDistance(start, end);
-      const timeMinutes = calculateWalkingTime(distance);
-      
-      Alert.alert(
-        'Route Calculated',
+    const distance = calculateDistance(start, end);
+    const timeMinutes = calculateWalkingTime(distance);
+    
+    Alert.alert(
+      'Route Calculated',
         `Distance: ${distance.toFixed(2)} km\nEstimated time: ${timeMinutes} minutes walking\n(Using direct route)`,
-        [{ text: 'OK' }]
-      );
+      [{ text: 'OK' }]
+    );
     } finally {
       setLoading(false);
     }

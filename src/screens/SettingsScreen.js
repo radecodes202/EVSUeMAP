@@ -93,29 +93,6 @@ const SettingsScreen = () => {
             onPress={() => Alert.alert('Profile', 'Profile editing coming soon!')}
           />
           <SettingsItem
-            icon="swap-horizontal-outline"
-            title="Switch Account"
-            subtitle="Login as different user"
-            onPress={() => {
-              Alert.alert(
-                'Switch Account',
-                'You will be logged out and returned to the login screen.',
-                [
-                  {
-                    text: 'Cancel',
-                    style: 'cancel',
-                  },
-                  {
-                    text: 'Switch',
-                    onPress: async () => {
-                      await logout();
-                    },
-                  },
-                ]
-              );
-            }}
-          />
-          <SettingsItem
             icon="information-circle-outline"
             title="About"
             subtitle="App information and version"

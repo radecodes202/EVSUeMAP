@@ -1,6 +1,6 @@
 // src/navigation/MainNavigator.js - Main tab navigation
 import React from 'react';
-import { TouchableOpacity, Alert } from 'react-native';
+import { TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -17,32 +17,11 @@ import AboutScreen from '../screens/AboutScreen';
 const Tab = createBottomTabNavigator();
 
 const MainNavigator = () => {
-  const { logout, user } = useAuth();
-
-  // Logout handler with confirmation
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel',
-        },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            await logout();
-          },
-        },
-      ]
-    );
-  };
+  const { logout } = useAuth(); // only needed if still using
 
   return (
     <Tab.Navigator
-      screenOptions={({ route, navigation }) => ({
+      screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName;
 
@@ -75,15 +54,6 @@ const MainNavigator = () => {
           fontWeight: 'bold',
           fontSize: 18,
         },
-        headerRight: () => (
-          <TouchableOpacity
-            onPress={handleLogout}
-            style={{ marginRight: 16, padding: 4 }}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="log-out-outline" size={24} color="#fff" />
-          </TouchableOpacity>
-        ),
         tabBarStyle: {
           height: 100,
           paddingBottom: 12,

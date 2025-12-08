@@ -1,6 +1,6 @@
 // src/navigation/MainNavigator.js - Main tab navigation
 import React from 'react';
-import { TouchableOpacity } from 'react-native';
+import { TouchableOpacity, Alert } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -11,7 +11,7 @@ import MapScreen from '../screens/MapScreen';
 import SearchScreen from '../screens/SearchScreen';
 import ChatbotScreen from '../screens/ChatbotScreen';
 import FavoritesScreen from '../screens/FavoritesScreen';
-import SettingsScreen from '../screens/SettingsScreen';
+import SettingsNavigator from './SettingsNavigator';
 import AboutScreen from '../screens/AboutScreen';
 
 const Tab = createBottomTabNavigator();
@@ -54,6 +54,32 @@ const MainNavigator = () => {
           fontWeight: 'bold',
           fontSize: 18,
         },
+        headerRight: ({ route }) => {
+          const { logout } = useAuth();
+          return (
+            <TouchableOpacity
+              onPress={() => {
+                Alert.alert(
+                  'Logout',
+                  'Are you sure you want to logout?',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Logout',
+                      style: 'destructive',
+                      onPress: async () => {
+                        await logout();
+                      },
+                    },
+                  ]
+                );
+              }}
+              style={{ marginRight: 16 }}
+            >
+              <Ionicons name="log-out-outline" size={24} color="#fff" />
+            </TouchableOpacity>
+          );
+        },
         tabBarStyle: {
           height: 100,
           paddingBottom: 12,
@@ -95,7 +121,7 @@ const MainNavigator = () => {
       />
       <Tab.Screen 
         name="Settings" 
-        component={SettingsScreen}
+        component={SettingsNavigator}
         options={{ title: 'Settings' }}
       />
     </Tab.Navigator>

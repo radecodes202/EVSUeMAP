@@ -22,11 +22,16 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants
 import { getErrorMessage } from '../utils/errorHandler';
 import { getFavorites, addFavorite, removeFavorite } from '../utils/storage';
 import { mockBuildings } from '../utils/mockData';
+import { mapService } from '../services/mapService';
 
 // Components
 import BuildingCard from '../components/BuildingCard';
 import LoadingView from '../components/LoadingView';
 import ErrorView from '../components/ErrorView';
+import CategoryPicker from '../components/CategoryPicker';
+
+// Constants
+import { BUILDING_CATEGORIES_WITH_ALL } from '../constants/categories';
 
 const SearchScreen = () => {
   const navigation = useNavigation();
@@ -36,7 +41,7 @@ const SearchScreen = () => {
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
   const [userLocation, setUserLocation] = useState(null);
-  const [selectedFilter, setSelectedFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState(''); // Empty string = show all (matches admin panel)
   const [favoriteIds, setFavoriteIds] = useState([]);
 
   // Fetch buildings on mount
@@ -69,10 +74,10 @@ const SearchScreen = () => {
     await loadFavorites();
   };
 
-  // Filter buildings when search query or filter changes
+  // Filter buildings when search query or category filter changes
   useEffect(() => {
     filterBuildings();
-  }, [searchQuery, selectedFilter, buildings]);
+  }, [searchQuery, categoryFilter, buildings]);
 
   // Request location permission
   const requestLocationPermission = async () => {
@@ -92,32 +97,23 @@ const SearchScreen = () => {
     }
   };
 
-  // Fetch buildings from API
+  // Fetch buildings from Supabase or API
   const fetchBuildings = async () => {
     try {
-      // Use mock data if enabled
-      if (USE_MOCK_DATA) {
-        console.log('📦 Using mock data for development');
-        setBuildings(mockBuildings);
-        setFilteredBuildings(mockBuildings);
-        setLoading(false);
-        return;
-      }
-
       setErrorMessage('');
-      const response = await axios.get(`${API_URL}/buildings`, {
-        timeout: API_TIMEOUT,
-      });
-
-      if (response.data.success) {
-        setBuildings(response.data.data);
-        setFilteredBuildings(response.data.data);
-      }
+      console.log('Fetching buildings...');
+      
+      // Use mapService which handles Supabase or mock data
+      const buildingsData = await mapService.getBuildings();
+      
+      console.log('✅ Buildings fetched:', buildingsData.length);
+      setBuildings(buildingsData);
+      setFilteredBuildings(buildingsData);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching buildings:', error);
       
-      // Fallback to mock data in development if API fails
+      // Fallback to mock data
       const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
       if (isDev || USE_MOCK_DATA) {
         console.log('📦 Falling back to mock data');
@@ -134,23 +130,35 @@ const SearchScreen = () => {
     }
   };
 
-  // Filter buildings based on search query and selected filter
+  // Filter buildings based on search query and category filter
+  // Empty string for categoryFilter means "show all" (matches admin panel logic)
   const filterBuildings = () => {
     let filtered = [...buildings];
+
+    // Apply category filter (empty string = show all)
+    if (categoryFilter) {
+      filtered = filtered.filter(building => {
+        // Handle both old format (building_name) and new format (name)
+        const buildingCategory = building.category || building.building_category;
+        return buildingCategory === categoryFilter;
+      });
+    }
 
     // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(building =>
-        building.building_name.toLowerCase().includes(query) ||
-        building.building_code.toLowerCase().includes(query) ||
-        (building.description && building.description.toLowerCase().includes(query))
-      );
+      filtered = filtered.filter(building => {
+        const name = building.building_name || building.name || '';
+        const code = building.building_code || building.code || '';
+        const description = building.description || '';
+        
+        return (
+          name.toLowerCase().includes(query) ||
+          code.toLowerCase().includes(query) ||
+          description.toLowerCase().includes(query)
+        );
+      });
     }
-
-    // Apply type filter (if you have building types in your data)
-    // For now, we'll just show all buildings
-    // You can extend this based on your building data structure
 
     setFilteredBuildings(filtered);
   };
@@ -211,12 +219,26 @@ const SearchScreen = () => {
             onChangeText={setSearchQuery}
             autoCapitalize="none"
             autoCorrect={false}
+            accessibilityLabel="Search buildings"
+            accessibilityHint="Type to search for buildings by name, code, or description"
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
               <Ionicons name="close-circle" size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
           )}
+        </View>
+        
+        {/* Category Filter */}
+        <View style={styles.filterContainer}>
+          <CategoryPicker
+            selectedValue={categoryFilter}
+            onValueChange={setCategoryFilter}
+            label="Filter by Category"
+            showLabel={true}
+            accessibilityLabel="Filter buildings by category"
+            accessibilityHint="Select a category to filter the building list, or select All Categories to show all buildings"
+          />
         </View>
       </View>
 
@@ -273,6 +295,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingVertical: Spacing.md,
     ...Shadows.small,
+  },
+  filterContainer: {
+    marginTop: Spacing.md,
   },
   searchBar: {
     flexDirection: 'row',

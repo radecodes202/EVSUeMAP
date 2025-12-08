@@ -126,7 +126,13 @@ const SettingsScreen = () => {
             icon="help-circle-outline"
             title="Help & Support"
             subtitle="Get help using the app"
-            onPress={() => Alert.alert('Help', 'Help center coming soon!')}
+            onPress={() => navigation.navigate('Help')}
+          />
+          <SettingsItem
+            icon="chatbubbles-outline"
+            title="Send Feedback"
+            subtitle="Report bugs or suggest features"
+            onPress={() => navigation.navigate('Feedback')}
           />
           <SettingsItem
             icon="document-text-outline"

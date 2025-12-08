@@ -1,13 +1,12 @@
 // src/screens/MapScreen.js - Main Map Screen
 import React, { useState, useEffect, useRef } from 'react';
 import { View, StyleSheet, Alert, Text } from 'react-native';
-import MapView, { Marker, Polyline, PROVIDER_DEFAULT } from 'react-native-maps';
+import MapView, { Marker, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';
 
 // Constants
-import { API_URL, API_TIMEOUT, EVSU_CENTER, MAP_ANIMATION_DURATION, MAP_ZOOM_DELTA, USE_MOCK_DATA } from '../constants/config';
+import { EVSU_CENTER, CAMPUS_BOUNDARIES, MAP_ANIMATION_DURATION, MAP_ZOOM_DELTA, USE_MOCK_DATA } from '../constants/config';
 import { Colors, Spacing, Shadows } from '../constants/theme';
 
 // Utils
@@ -15,6 +14,7 @@ import { calculateDistance, calculateWalkingTime } from '../utils/distance';
 import { calculateRoute as getRoute } from '../utils/routing';
 import { getErrorMessage } from '../utils/errorHandler';
 import { mockBuildings } from '../utils/mockData';
+import { mapService } from '../services/mapService';
 
 // Components
 import LoadingView from '../components/LoadingView';
@@ -30,11 +30,16 @@ const MapScreen = ({ navigation, route }) => {
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [mapRegion, setMapRegion] = useState(EVSU_CENTER);
+  const [paths, setPaths] = useState([]);
+  const [mapType, setMapType] = useState('standard');
+  const buildingOverlaySize = 0.00018; // ~20m footprint approximation; adjust if too large
 
   // Fetch buildings when component loads
   useEffect(() => {
     console.log('MapScreen loaded');
     fetchBuildings();
+    fetchPaths();
     requestLocationPermission();
     
     // Center map on campus when component mounts
@@ -43,6 +48,18 @@ const MapScreen = ({ navigation, route }) => {
         mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
       }
     }, 500);
+
+    // Subscribe to real-time building updates
+    const unsubscribe = mapService.subscribeToBuildings((payload) => {
+      console.log('Building updated:', payload);
+      // Refresh buildings when changes occur
+      fetchBuildings();
+    });
+
+    // Cleanup subscription on unmount
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   // Handle navigation from Search screen
@@ -95,42 +112,28 @@ const MapScreen = ({ navigation, route }) => {
     }
   };
 
-  // Fetch buildings from backend
+  // Fetch buildings from Supabase or API
   const fetchBuildings = async () => {
     try {
-      // Use mock data if enabled
-      if (USE_MOCK_DATA) {
-        console.log('📦 Using mock data for development');
-        setBuildings(mockBuildings);
-        setLoading(false);
-        return;
-      }
-
-      console.log('Fetching buildings from:', API_URL);
       setErrorMessage('');
+      console.log('Fetching buildings...');
       
-      const response = await axios.get(`${API_URL}/buildings`, {
-        timeout: API_TIMEOUT,
-      });
+      // Use mapService which handles Supabase or mock data
+      const buildingsData = await mapService.getBuildings();
       
-      console.log('✅ Buildings fetched:', response.data.count);
-      
-      if (response.data.success) {
-        setBuildings(response.data.data);
-      }
-      
+      console.log('✅ Buildings fetched:', buildingsData.length);
+      setBuildings(buildingsData);
       setLoading(false);
     } catch (error) {
       console.error('❌ Error fetching buildings:', error.message);
       
-      // Fallback to mock data in development if API fails
+      // Fallback to mock data
       const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
       if (isDev || USE_MOCK_DATA) {
         console.log('📦 Falling back to mock data');
         setBuildings(mockBuildings);
         setLoading(false);
         setErrorMessage('');
-        // Don't show alert in dev mode when using mock data
         return;
       }
       
@@ -138,6 +141,16 @@ const MapScreen = ({ navigation, route }) => {
       setErrorMessage(errorMsg);
       setLoading(false);
       Alert.alert('Connection Error', errorMsg);
+    }
+  };
+
+  // Fetch admin-defined paths and waypoints
+  const fetchPaths = async () => {
+    try {
+      const data = await mapService.getPaths();
+      setPaths(data);
+    } catch (error) {
+      console.error('❌ Error fetching paths:', error);
     }
   };
 
@@ -165,15 +178,23 @@ const MapScreen = ({ navigation, route }) => {
     }
   };
 
-  // Calculate route between two points using OSRM routing
+  // Calculate route between two points using custom paths first, then OSRM
   const calculateRoute = async (start, end) => {
     console.log('Calculating route from', start, 'to', end);
     
     try {
       // Show loading indicator
       setLoading(true);
-      
-      // Get route from OSRM (follows walkways and paths)
+
+      // Try admin-defined paths first
+      const pathRoute = pickBestPath(start, end, paths);
+      if (pathRoute) {
+        setRouteCoordinates(pathRoute.coordinates);
+        Alert.alert('Route Calculated', `Using campus path: ${pathRoute.name || 'Custom Path'}`);
+        return;
+      }
+
+      // OSRM fallback
       const routeData = await getRoute(start, end);
       
       if (routeData.success) {
@@ -186,7 +207,7 @@ const MapScreen = ({ navigation, route }) => {
         );
       } else {
         // Fallback to straight line if routing fails
-    setRouteCoordinates([start, end]);
+        setRouteCoordinates([start, end]);
         const distance = calculateDistance(start, end);
         const timeMinutes = calculateWalkingTime(distance);
         
@@ -213,6 +234,50 @@ const MapScreen = ({ navigation, route }) => {
     }
   };
 
+  // Pick the best admin-defined path based on closest endpoints
+  const pickBestPath = (start, end, pathList) => {
+    if (!pathList || pathList.length === 0) return null;
+
+    let best = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    pathList.forEach((path) => {
+      const wps = path.waypoints || [];
+      if (wps.length < 2) return;
+
+      const first = wps[0];
+      const last = wps[wps.length - 1];
+
+      const optionA =
+        calculateDistance(start, { latitude: first.latitude, longitude: first.longitude }) +
+        calculateDistance(end, { latitude: last.latitude, longitude: last.longitude });
+      const optionB =
+        calculateDistance(start, { latitude: last.latitude, longitude: last.longitude }) +
+        calculateDistance(end, { latitude: first.latitude, longitude: first.longitude });
+
+      const score = Math.min(optionA, optionB);
+      if (score < bestScore) {
+        bestScore = score;
+        const forward = optionA <= optionB;
+        const coords = forward ? wps : [...wps].reverse();
+        best = {
+          name: path.name,
+          coordinates: coords.map((wp) => ({
+            latitude: wp.latitude,
+            longitude: wp.longitude,
+          })),
+        };
+      }
+    });
+
+    // Require endpoints reasonably close (~0.5 km combined) to use the path
+    if (bestScore > 0.5) {
+      return null;
+    }
+
+    return best;
+  };
+
   // Center map on user location
   const centerOnUser = async () => {
     if (!userLocation) {
@@ -231,9 +296,39 @@ const MapScreen = ({ navigation, route }) => {
     }
   };
 
+  // Check if region is within campus boundaries
+  const isWithinCampusBounds = (region) => {
+    const { latitude, longitude } = region;
+    const { northEast, southWest } = CAMPUS_BOUNDARIES;
+    
+    return (
+      latitude >= southWest.latitude &&
+      latitude <= northEast.latitude &&
+      longitude >= southWest.longitude &&
+      longitude <= northEast.longitude
+    );
+  };
+
+  // Handle region change - keep map within campus boundaries
+  const handleRegionChangeComplete = (region) => {
+    // Allow some panning but keep focus on campus
+    // If user pans too far, gently guide back
+    if (!isWithinCampusBounds(region)) {
+      // Snap back to campus center if outside boundaries
+      setMapRegion(EVSU_CENTER);
+      if (mapRef.current) {
+        mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
+      }
+    } else {
+      // Update region if within bounds
+      setMapRegion(region);
+    }
+  };
+
   // Center map on campus
   const centerOnCampus = () => {
     console.log('Centering on campus');
+    setMapRegion(EVSU_CENTER);
     if (mapRef.current) {
       mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
     }
@@ -244,6 +339,19 @@ const MapScreen = ({ navigation, route }) => {
     console.log('Clearing route');
     setRouteCoordinates([]);
     setSelectedLocation(null);
+  };
+
+  // Create a simple rectangle polygon around a building coordinate
+  const getBuildingPolygon = (building) => {
+    const lat = parseFloat(building.latitude);
+    const lng = parseFloat(building.longitude);
+    const d = buildingOverlaySize;
+    return [
+      { latitude: lat + d, longitude: lng - d },
+      { latitude: lat + d, longitude: lng + d },
+      { latitude: lat - d, longitude: lng + d },
+      { latitude: lat - d, longitude: lng - d },
+    ];
   };
 
   // Handle navigate button press
@@ -285,24 +393,64 @@ const MapScreen = ({ navigation, route }) => {
         provider={PROVIDER_DEFAULT}
         style={styles.map}
         initialRegion={EVSU_CENTER}
-        region={EVSU_CENTER}
+        region={mapRegion}
+        onRegionChangeComplete={handleRegionChangeComplete}
         onMapReady={() => {
           // Ensure map is centered on campus when ready
+          setMapRegion(EVSU_CENTER);
           if (mapRef.current) {
             mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
           }
         }}
+        minZoomLevel={15}
+        maxZoomLevel={20}
         showsUserLocation={true}
         showsMyLocationButton={false}
         showsCompass={true}
         showsBuildings={false}
-        mapType="standard"
-        customMapStyle={[]}
+        mapType={mapType}
       >
+        {/* Admin paths overlay */}
+        {paths.map((path) => (
+          <Polyline
+            key={`path-${path.id}`}
+            coordinates={(path.waypoints || []).map((wp) => ({
+              latitude: wp.latitude,
+              longitude: wp.longitude,
+            }))}
+            strokeColor={Colors.secondary}
+            strokeWidth={4}
+            lineDashPattern={[6, 4]}
+          />
+        ))}
+
+        {/* Building footprints (approx rectangles) */}
+        {buildings.map((building) => (
+          <Polygon
+            key={`poly-${building.building_id || building.id || building.code}`}
+            coordinates={getBuildingPolygon(building)}
+            strokeColor={Colors.primary}
+            fillColor={`${Colors.primary}33`}
+            strokeWidth={1.5}
+            tappable
+            onPress={() => {
+              setSelectedLocation({
+                id: building.building_id,
+                name: building.building_name,
+                code: building.building_code,
+                type: 'building',
+                latitude: building.latitude,
+                longitude: building.longitude,
+                description: building.description,
+              });
+            }}
+          />
+        ))}
+
         {/* Building Markers */}
         {buildings.map((building) => (
           <Marker
-            key={building.building_id}
+            key={building.building_id || building.id || `building-${building.latitude}-${building.longitude}`}
             coordinate={{
               latitude: parseFloat(building.latitude),
               longitude: parseFloat(building.longitude),
@@ -348,6 +496,18 @@ const MapScreen = ({ navigation, route }) => {
         <ControlButton 
           iconName="locate" 
           onPress={centerOnUser}
+        />
+
+        <ControlButton 
+          iconName="layers-outline" 
+          onPress={() => {
+            setMapType((prev) => {
+              if (prev === 'standard') return 'satellite';
+              if (prev === 'satellite') return 'hybrid';
+              if (prev === 'hybrid') return 'terrain';
+              return 'standard';
+            });
+          }}
         />
         
         {routeCoordinates.length > 0 && (

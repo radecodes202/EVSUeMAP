@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 
-const LoginScreen = () => {
+const LoginScreen = ({ navigation }) => {
   const { login, loginAsGuest } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -146,6 +146,12 @@ const LoginScreen = () => {
           <Text style={styles.footerText}>
             Demo Mode: Enter any email/password to login instantly
           </Text>
+          <View style={styles.registerLinkContainer}>
+            <Text style={styles.footerText}>Don't have an account? </Text>
+            <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+              <Text style={styles.registerLink}>Sign Up</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </KeyboardAvoidingView>
@@ -227,6 +233,16 @@ const styles = StyleSheet.create({
     ...Typography.caption,
     color: Colors.textLight,
     textAlign: 'center',
+  },
+  registerLinkContainer: {
+    flexDirection: 'row',
+    marginTop: Spacing.md,
+    alignItems: 'center',
+  },
+  registerLink: {
+    ...Typography.caption,
+    color: Colors.primary,
+    fontWeight: '600',
   },
   divider: {
     flexDirection: 'row',

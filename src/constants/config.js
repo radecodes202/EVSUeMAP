@@ -1,22 +1,7 @@
-// src/constants/config.js - Application Configuration
-
-// ⚠️ IMPORTANT: Replace this with YOUR computer's IP address!
-// Find it using: ipconfig (Windows) or ifconfig (Mac/Linux)
-// For production, use environment variables or a proper backend URL
-// Using typeof check for __DEV__ to ensure compatibility
-
-// For Android Emulator, use: 'http://10.0.2.2:3000/api'
-// For iOS Simulator or Physical Device, use your computer's IP: 'http://192.168.1.9:3000/api'
-// To find your IP: ipconfig (Windows) or ifconfig (Mac/Linux) - look for IPv4 Address
-
-export const API_URL = (typeof __DEV__ !== 'undefined' && __DEV__)
-  ? 'http://192.168.1.8:3000/api'  // Development - Update with your IP
-  : 'https://api.evsuemap.com/api'; // Production - Replace with actual URL
-
 // Enable mock data when API is unavailable (for development/testing)
 // Set to true to always use mock data, or leave false to auto-fallback on error
 // For now, enabling mock data by default since API is not available
-export const USE_MOCK_DATA = true; // Set to false to try API first, then fallback to mock data
+export const USE_MOCK_DATA = false; // Set to false to try API first, then fallback to mock data
 
 export const API_TIMEOUT = 5000; // 5 seconds
 

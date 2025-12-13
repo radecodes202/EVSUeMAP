@@ -1,9 +1,19 @@
 // src/screens/MapScreen.js - Main Map Screen
 import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, Alert, Text } from 'react-native';
-import MapView, { Marker, Polyline, Polygon, PROVIDER_DEFAULT } from 'react-native-maps';
+import { View, StyleSheet, Alert, Text, Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { Ionicons } from '@expo/vector-icons';
+
+// Conditionally import react-native-maps only on native platforms
+let MapView, Marker, Polyline, Polygon, PROVIDER_DEFAULT;
+if (Platform.OS !== 'web') {
+  const Maps = require('react-native-maps');
+  MapView = Maps.default;
+  Marker = Maps.Marker;
+  Polyline = Maps.Polyline;
+  Polygon = Maps.Polygon;
+  PROVIDER_DEFAULT = Maps.PROVIDER_DEFAULT;
+}
 
 // Constants
 import { EVSU_CENTER, CAMPUS_BOUNDARIES, MAP_ANIMATION_DURATION, MAP_ZOOM_DELTA, USE_MOCK_DATA } from '../constants/config';
@@ -386,6 +396,84 @@ const MapScreen = ({ navigation, route }) => {
     );
   }
 
+  // Web fallback - show a simple map placeholder with building list
+  if (Platform.OS === 'web') {
+    const mapUrl = `https://www.openstreetmap.org/?mlat=${EVSU_CENTER.latitude}&mlon=${EVSU_CENTER.longitude}&zoom=16`;
+    
+    return (
+      <View style={styles.container}>
+        <View style={styles.webMapContainer}>
+          <View style={styles.webMapPlaceholder}>
+            <Ionicons name="map-outline" size={48} color={Colors.primary} />
+            <Text style={styles.webMapText}>Interactive Map</Text>
+            <Text style={styles.webMapSubtext}>
+              Map view is optimized for mobile devices.{'\n'}
+              {Platform.OS === 'web' && typeof window !== 'undefined' && (
+                <Text 
+                  style={{ color: Colors.primary, textDecorationLine: 'underline', cursor: 'pointer' }}
+                  onPress={() => window.open(mapUrl, '_blank')}
+                >
+                  Open in OpenStreetMap
+                </Text>
+              )}
+            </Text>
+            <View style={styles.buildingsList}>
+              <Text style={styles.buildingsListTitle}>Buildings ({buildings.length})</Text>
+              {buildings.slice(0, 10).map((building) => (
+                <View key={building.building_id || building.id} style={styles.buildingItem}>
+                  <Ionicons name="business" size={20} color={Colors.primary} />
+                  <View style={styles.buildingInfo}>
+                    <Text style={styles.buildingName}>{building.building_name}</Text>
+                    <Text style={styles.buildingCode}>{building.building_code}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        </View>
+        
+        {/* Control Buttons */}
+        <View style={styles.controls}>
+          <ControlButton 
+            iconName="school-outline" 
+            onPress={centerOnCampus}
+          />
+          
+          <ControlButton 
+            iconName="locate" 
+            onPress={centerOnUser}
+          />
+          
+          {routeCoordinates.length > 0 && (
+            <ControlButton 
+              iconName="close" 
+              onPress={clearRoute}
+              backgroundColor={Colors.secondary}
+            />
+          )}
+        </View>
+
+        {/* Location Info Card */}
+        {selectedLocation && (
+          <InfoCard
+            title={selectedLocation.name}
+            code={selectedLocation.code}
+            description={selectedLocation.description}
+            onClose={clearRoute}
+            onNavigate={handleNavigate}
+            showNavigate={!!userLocation}
+          />
+        )}
+
+        {/* Buildings Count Badge */}
+        <View style={styles.buildingsBadge}>
+          <Ionicons name="business" size={16} color={Colors.primary} />
+          <Text style={styles.buildingsBadgeText}>{buildings.length} Buildings</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <MapView
@@ -552,6 +640,7 @@ const styles = StyleSheet.create({
     top: Spacing.xl,
     right: Spacing.xl,
     gap: Spacing.md,
+    zIndex: 1000,
   },
   buildingsBadge: {
     position: 'absolute',
@@ -565,11 +654,68 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     ...Shadows.small,
     gap: 6,
+    zIndex: 1000,
   },
   buildingsBadgeText: {
     fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
+  },
+  webMapContainer: {
+    flex: 1,
+    backgroundColor: Colors.background,
+  },
+  webMapPlaceholder: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  webMapText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginTop: Spacing.md,
+    marginBottom: Spacing.sm,
+  },
+  webMapSubtext: {
+    fontSize: 14,
+    color: Colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+  buildingsList: {
+    width: '100%',
+    maxWidth: 400,
+    marginTop: Spacing.lg,
+  },
+  buildingsListTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: Colors.text,
+    marginBottom: Spacing.md,
+  },
+  buildingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: Spacing.md,
+    backgroundColor: Colors.background,
+    borderRadius: 8,
+    marginBottom: Spacing.sm,
+    ...Shadows.small,
+    gap: Spacing.sm,
+  },
+  buildingInfo: {
+    flex: 1,
+  },
+  buildingName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: Colors.text,
+  },
+  buildingCode: {
+    fontSize: 14,
+    color: Colors.textSecondary,
   },
 });
 

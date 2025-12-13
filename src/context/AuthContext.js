@@ -66,21 +66,30 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: error.message };
       }
 
-      const { data: profile, error: profileError } = await supabase
+      // Try to fetch user profile, but don't fail if table doesn't exist
+      let profile = null;
+      const { data: profileData, error: profileError } = await supabase
         .from('users')
         .select('*')
         .eq('id', data.user.id)
         .single();
 
       if (profileError) {
-        return { success: false, error: profileError.message };
+        // If table doesn't exist, use auth user data as fallback
+        if (profileError.message && profileError.message.includes('schema cache')) {
+          console.warn('Users table not found, using auth user data');
+        } else {
+          console.warn('Profile fetch error:', profileError.message);
+        }
+      } else {
+        profile = profileData;
       }
 
       const authData = {
         user: {
           id: data.user.id,
           email: data.user.email,
-          name: profile?.name || 'User',
+          name: profile?.name || data.user.user_metadata?.name || 'User',
           role: profile?.role || 'user',
         },
         token: data.session?.access_token,
@@ -127,30 +136,71 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: error.message };
       }
 
-      const { error: profileError } = await supabase
-        .from('users')
-        .upsert({
-          id: data.user.id,
-          email: data.user.email,
-          name: name.trim(),
-          role: 'user',
-        });
-
-      if (profileError) {
-        return { success: false, error: profileError.message };
+      if (!data.user) {
+        return { success: false, error: 'User creation failed. Please try again.' };
       }
 
-      const { data: profile } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
+      // Wait a moment for the database trigger to create the user profile
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
+      // Try to fetch the profile (created by trigger)
+      let profile = null;
+      let profileError = null;
+      
+      // Try fetching the profile with retries
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const { data: profileData, error: fetchError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (profileData && !fetchError) {
+          profile = profileData;
+          break;
+        }
+        
+        profileError = fetchError;
+        
+        // If table doesn't exist, try to create the profile manually
+        if (fetchError && fetchError.message && fetchError.message.includes('schema cache')) {
+          console.warn('Table not found in schema cache, attempting manual profile creation...');
+          
+          // Try to insert the profile manually (may fail due to RLS, but worth trying)
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              id: data.user.id,
+              email: data.user.email,
+              name: name.trim(),
+              role: 'user',
+            });
+          
+          if (!insertError) {
+            // If insert succeeded, fetch it
+            const { data: newProfile } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', data.user.id)
+              .single();
+            profile = newProfile;
+            break;
+          }
+        }
+        
+        // Wait before retry
+        if (attempt < 2) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+
+      // If we still don't have a profile, use defaults from auth user
+      // The profile might be created later by the trigger
       const authData = {
         user: {
           id: data.user.id,
           email: data.user.email,
-          name: profile?.name || name.trim(),
+          name: profile?.name || name.trim() || data.user.user_metadata?.name || 'User',
           role: profile?.role || 'user',
         },
         token: data.session?.access_token,
@@ -163,7 +213,7 @@ export const AuthProvider = ({ children }) => {
       return { success: true };
     } catch (error) {
       console.error('Registration error:', error);
-      return { success: false, error: 'Registration failed. Please try again.' };
+      return { success: false, error: error.message || 'Registration failed. Please try again.' };
     }
   };
 

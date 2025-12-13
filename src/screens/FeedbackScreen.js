@@ -65,6 +65,15 @@ const FeedbackScreen = () => {
 
       const { error } = await supabase.from('user_feedback').insert(payload);
       if (error) {
+        // Handle schema cache errors gracefully
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          Alert.alert(
+            'Database Setup Required', 
+            'The user_feedback table is not set up. Please run database-setup.sql in your Supabase project.'
+          );
+          return;
+        }
         throw error;
       }
 

@@ -21,7 +21,7 @@ import { Colors, Spacing, Shadows } from '../constants/theme';
 
 // Utils
 import { calculateDistance, calculateWalkingTime } from '../utils/distance';
-import { calculateRoute as getRoute } from '../utils/routing';
+import { calculateRoute as getRoute, getRouteSummary } from '../utils/routing';
 import { getErrorMessage } from '../utils/errorHandler';
 import { mockBuildings } from '../utils/mockData';
 import { mapService } from '../services/mapService';
@@ -43,7 +43,10 @@ const MapScreen = ({ navigation, route }) => {
   const [mapRegion, setMapRegion] = useState(EVSU_CENTER);
   const [paths, setPaths] = useState([]);
   const [mapType, setMapType] = useState('standard');
-  const buildingOverlaySize = 0.00018; // ~20m footprint approximation; adjust if too large
+  
+  // Convert meters to approximate lat/lng degrees (1 degree ≈ 111,320 meters at equator)
+  const metersToLatDegrees = (meters) => meters / 111320;
+  const metersToLngDegrees = (meters, latitude) => meters / (111320 * Math.cos(latitude * Math.PI / 180));
 
   // Fetch buildings when component loads
   useEffect(() => {
@@ -188,42 +191,43 @@ const MapScreen = ({ navigation, route }) => {
     }
   };
 
-  // Calculate route between two points using custom paths first, then OSRM
+  // Calculate route between two points using custom campus paths only
   const calculateRoute = async (start, end) => {
-    console.log('Calculating route from', start, 'to', end);
+    console.log('Calculating campus route from', start, 'to', end);
     
     try {
-      // Show loading indicator
       setLoading(true);
 
-      // Try admin-defined paths first
-      const pathRoute = pickBestPath(start, end, paths);
-      if (pathRoute) {
-        setRouteCoordinates(pathRoute.coordinates);
-        Alert.alert('Route Calculated', `Using campus path: ${pathRoute.name || 'Custom Path'}`);
-        return;
-      }
-
-      // OSRM fallback
+      // Use the routing utility which only uses custom paths
       const routeData = await getRoute(start, end);
       
       if (routeData.success) {
         setRouteCoordinates(routeData.coordinates);
         
-        Alert.alert(
-          'Route Calculated',
-          `Distance: ${routeData.distance.toFixed(2)} km\nEstimated time: ${routeData.duration} minutes walking${routeData.isFallback ? '\n(Using approximate route)' : ''}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        // Fallback to straight line if routing fails
-        setRouteCoordinates([start, end]);
-        const distance = calculateDistance(start, end);
-        const timeMinutes = calculateWalkingTime(distance);
+        // Get formatted summary
+        const summary = getRouteSummary(routeData);
         
+        if (routeData.isCustomPath) {
+          // Successfully using custom path
+          Alert.alert(
+            '🗺️ Route Found',
+            summary,
+            [{ text: 'OK' }]
+          );
+        } else if (routeData.isDirectRoute) {
+          // No custom path available - showing direct line
+          Alert.alert(
+            '📍 Direct Route',
+            `${summary}\n\nNo custom path covers this route yet.`,
+            [{ text: 'OK' }]
+          );
+        }
+      } else {
+        // Should not happen with current implementation
+        setRouteCoordinates([start, end]);
         Alert.alert(
-          'Route Calculated',
-          `Distance: ${distance.toFixed(2)} km\nEstimated time: ${timeMinutes} minutes walking\n(Using direct route)`,
+          'Route Error',
+          'Could not calculate route. Showing direct line.',
           [{ text: 'OK' }]
         );
       }
@@ -231,61 +235,17 @@ const MapScreen = ({ navigation, route }) => {
       console.error('Route calculation error:', error);
       // Fallback to straight line
       setRouteCoordinates([start, end]);
-    const distance = calculateDistance(start, end);
-    const timeMinutes = calculateWalkingTime(distance);
-    
-    Alert.alert(
-      'Route Calculated',
-        `Distance: ${distance.toFixed(2)} km\nEstimated time: ${timeMinutes} minutes walking\n(Using direct route)`,
-      [{ text: 'OK' }]
-    );
+      const distance = calculateDistance(start, end);
+      const timeMinutes = calculateWalkingTime(distance);
+      
+      Alert.alert(
+        'Route Error',
+        `Distance: ${distance.toFixed(2)} km\nEstimated time: ${timeMinutes} min\n(Direct route)`,
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  // Pick the best admin-defined path based on closest endpoints
-  const pickBestPath = (start, end, pathList) => {
-    if (!pathList || pathList.length === 0) return null;
-
-    let best = null;
-    let bestScore = Number.POSITIVE_INFINITY;
-
-    pathList.forEach((path) => {
-      const wps = path.waypoints || [];
-      if (wps.length < 2) return;
-
-      const first = wps[0];
-      const last = wps[wps.length - 1];
-
-      const optionA =
-        calculateDistance(start, { latitude: first.latitude, longitude: first.longitude }) +
-        calculateDistance(end, { latitude: last.latitude, longitude: last.longitude });
-      const optionB =
-        calculateDistance(start, { latitude: last.latitude, longitude: last.longitude }) +
-        calculateDistance(end, { latitude: first.latitude, longitude: first.longitude });
-
-      const score = Math.min(optionA, optionB);
-      if (score < bestScore) {
-        bestScore = score;
-        const forward = optionA <= optionB;
-        const coords = forward ? wps : [...wps].reverse();
-        best = {
-          name: path.name,
-          coordinates: coords.map((wp) => ({
-            latitude: wp.latitude,
-            longitude: wp.longitude,
-          })),
-        };
-      }
-    });
-
-    // Require endpoints reasonably close (~0.5 km combined) to use the path
-    if (bestScore > 0.5) {
-      return null;
-    }
-
-    return best;
   };
 
   // Center map on user location
@@ -351,17 +311,53 @@ const MapScreen = ({ navigation, route }) => {
     setSelectedLocation(null);
   };
 
-  // Create a simple rectangle polygon around a building coordinate
+  // Create a rectangle polygon around a building using actual dimensions
+  // Supports rotation for buildings that aren't aligned with north
   const getBuildingPolygon = (building) => {
     const lat = parseFloat(building.latitude);
     const lng = parseFloat(building.longitude);
-    const d = buildingOverlaySize;
-    return [
-      { latitude: lat + d, longitude: lng - d },
-      { latitude: lat + d, longitude: lng + d },
-      { latitude: lat - d, longitude: lng + d },
-      { latitude: lat - d, longitude: lng - d },
+    
+    // Get dimensions from database or use defaults (in meters)
+    const widthMeters = parseFloat(building.width_meters) || 20.0;
+    const heightMeters = parseFloat(building.height_meters) || 20.0;
+    const rotationDeg = parseFloat(building.rotation_degrees) || 0.0;
+    
+    // Convert meters to degrees (accounting for latitude)
+    const halfWidthDeg = metersToLngDegrees(widthMeters / 2, lat);
+    const halfHeightDeg = metersToLatDegrees(heightMeters / 2);
+    
+    // Define corners relative to center (in degrees, before rotation)
+    // Using a coordinate system where x = longitude offset, y = latitude offset
+    const corners = [
+      { x: -halfWidthDeg, y: halfHeightDeg },   // top-left
+      { x: halfWidthDeg, y: halfHeightDeg },     // top-right
+      { x: halfWidthDeg, y: -halfHeightDeg },    // bottom-right
+      { x: -halfWidthDeg, y: -halfHeightDeg },  // bottom-left
     ];
+    
+    // Apply rotation around center (0, 0)
+    if (Math.abs(rotationDeg) > 0.01) { // Only rotate if significant
+      const radians = (rotationDeg * Math.PI) / 180;
+      const cos = Math.cos(radians);
+      const sin = Math.sin(radians);
+      
+      return corners.map(corner => {
+        // Rotate the corner coordinates
+        const rotatedX = corner.x * cos - corner.y * sin;
+        const rotatedY = corner.x * sin + corner.y * cos;
+        
+        return {
+          latitude: lat + rotatedY,  // y maps to latitude
+          longitude: lng + rotatedX, // x maps to longitude
+        };
+      });
+    }
+    
+    // No rotation - simple offset
+    return corners.map(corner => ({
+      latitude: lat + corner.y,
+      longitude: lng + corner.x,
+    }));
   };
 
   // Handle navigate button press
@@ -544,7 +540,7 @@ const MapScreen = ({ navigation, route }) => {
               longitude: parseFloat(building.longitude),
             }}
             title={building.building_name}
-            description={`${building.building_code} • ${building.floors} floors`}
+            description={building.building_code}
             pinColor={
               selectedLocation?.id === building.building_id ? Colors.secondary : Colors.primary
             }

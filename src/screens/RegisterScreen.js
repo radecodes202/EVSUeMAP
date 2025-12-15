@@ -18,7 +18,6 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants
 
 const RegisterScreen = ({ navigation }) => {
   const { register } = useAuth();
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -28,11 +27,6 @@ const RegisterScreen = ({ navigation }) => {
 
   const handleRegister = async () => {
     // Validation
-    if (!name.trim()) {
-      Alert.alert('Error', 'Please enter your name');
-      return;
-    }
-
     if (!email.trim()) {
       Alert.alert('Error', 'Please enter your email');
       return;
@@ -60,11 +54,23 @@ const RegisterScreen = ({ navigation }) => {
 
     setLoading(true);
     try {
-      const result = await register(name.trim(), email.trim(), password);
+      const result = await register(email.trim(), password);
       if (!result.success) {
         Alert.alert('Registration Failed', result.error || 'Could not create account');
+      } else if (result.requiresConfirmation) {
+        // Email confirmation required
+        Alert.alert(
+          'Account Created',
+          result.message || 'Please check your email to confirm your account before signing in.',
+          [
+            {
+              text: 'OK',
+              onPress: () => navigation.navigate('Login'),
+            },
+          ]
+        );
       }
-      // Navigation will be handled by AuthNavigator
+      // If no confirmation needed, navigation will be handled by AuthNavigator
     } catch (error) {
       Alert.alert('Error', 'An unexpected error occurred');
     } finally {
@@ -90,19 +96,6 @@ const RegisterScreen = ({ navigation }) => {
           </View>
 
           <View style={styles.form}>
-            <View style={styles.inputContainer}>
-              <Ionicons name="person-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
-              <TextInput
-                style={styles.input}
-                placeholder="Full Name"
-                placeholderTextColor={Colors.textLight}
-                value={name}
-                onChangeText={setName}
-                autoCapitalize="words"
-                editable={!loading}
-              />
-            </View>
-
             <View style={styles.inputContainer}>
               <Ionicons name="mail-outline" size={20} color={Colors.textSecondary} style={styles.inputIcon} />
               <TextInput

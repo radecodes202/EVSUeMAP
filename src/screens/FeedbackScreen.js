@@ -15,8 +15,10 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 import { useAuth } from '../context/AuthContext';
 
-const FEEDBACK_TYPES = [
+// Categories must match database CHECK constraint
+const FEEDBACK_CATEGORIES = [
   { label: 'Bug', value: 'bug' },
+  { label: 'Feature', value: 'feature' },
   { label: 'Suggestion', value: 'suggestion' },
   { label: 'Complaint', value: 'complaint' },
   { label: 'Compliment', value: 'compliment' },
@@ -24,7 +26,7 @@ const FEEDBACK_TYPES = [
 
 const FeedbackScreen = () => {
   const { user } = useAuth();
-  const [feedbackType, setFeedbackType] = useState('suggestion');
+  const [category, setCategory] = useState('suggestion');
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [rating, setRating] = useState('');
@@ -57,7 +59,8 @@ const FeedbackScreen = () => {
 
       const payload = {
         user_id: user?.id || null,
-        feedback_type: feedbackType,
+        user_email: user?.email || null,
+        category: category,
         subject: subject.trim(),
         message: message.trim(),
         rating: rating ? Number(rating) : null,
@@ -81,7 +84,7 @@ const FeedbackScreen = () => {
       setSubject('');
       setMessage('');
       setRating('');
-      setFeedbackType('suggestion');
+      setCategory('suggestion');
     } catch (err) {
       console.error('Feedback submit error:', err);
       Alert.alert('Error', err.message || 'Could not submit feedback. Please try again.');
@@ -98,27 +101,27 @@ const FeedbackScreen = () => {
           Let us know how we can improve EVSU eMAP. Your feedback helps us prioritize fixes and features.
         </Text>
 
-        {/* Feedback type */}
-        <Text style={styles.label}>Feedback Type</Text>
+        {/* Feedback category */}
+        <Text style={styles.label}>Category</Text>
         <View style={styles.typeRow}>
-          {FEEDBACK_TYPES.map((type) => (
+          {FEEDBACK_CATEGORIES.map((cat) => (
             <TouchableOpacity
-              key={type.value}
+              key={cat.value}
               style={[
                 styles.typeChip,
-                feedbackType === type.value && styles.typeChipActive,
+                category === cat.value && styles.typeChipActive,
               ]}
-              onPress={() => setFeedbackType(type.value)}
+              onPress={() => setCategory(cat.value)}
               accessibilityRole="button"
-              accessibilityLabel={`Feedback type ${type.label}`}
+              accessibilityLabel={`Feedback category ${cat.label}`}
             >
               <Text
                 style={[
                   styles.typeText,
-                  feedbackType === type.value && styles.typeTextActive,
+                  category === cat.value && styles.typeTextActive,
                 ]}
               >
-                {type.label}
+                {cat.label}
               </Text>
             </TouchableOpacity>
           ))}

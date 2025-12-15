@@ -43,12 +43,11 @@ export const AuthProvider = ({ children }) => {
       // Demo mode: Instant login when USE_MOCK_DATA is enabled
       if (USE_MOCK_DATA) {
         console.log('📦 Demo mode: Using mock authentication');
-        const demoUser = {
-          id: 1,
-          email: email.trim() || 'demo@evsu.edu.ph',
-          name: 'Demo User',
-          role: 'admin',
-        };
+      const demoUser = {
+        id: 1,
+        email: email.trim() || 'demo@evsu.edu.ph',
+        role: 'admin',
+      };
         const demoToken = 'demo_token_' + Date.now();
         const authData = { user: demoUser, token: demoToken };
         await saveAuthData(authData);
@@ -63,6 +62,14 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) {
+        // Handle email confirmation error with a user-friendly message
+        if (error.message && error.message.includes('email_not_confirmed')) {
+          return { 
+            success: false, 
+            error: 'Please check your email and confirm your account before signing in. If you didn\'t receive an email, check your spam folder or contact support.' 
+          };
+        }
+        // Handle other errors
         return { success: false, error: error.message };
       }
 
@@ -89,7 +96,6 @@ export const AuthProvider = ({ children }) => {
         user: {
           id: data.user.id,
           email: data.user.email,
-          name: profile?.name || data.user.user_metadata?.name || 'User',
           role: profile?.role || 'user',
         },
         token: data.session?.access_token,
@@ -106,14 +112,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (name, email, password) => {
+  const register = async (email, password) => {
     try {
       if (USE_MOCK_DATA) {
         console.log('📦 Demo mode: Using mock registration');
         const demoUser = {
           id: Date.now(),
           email: email.trim(),
-          name: name.trim(),
           role: 'user',
         };
         const demoToken = 'demo_token_' + Date.now();
@@ -124,11 +129,21 @@ export const AuthProvider = ({ children }) => {
         return { success: true };
       }
 
+      // Determine redirect URL based on platform
+      let redirectUrl = 'evsuemap://auth/callback';
+      
+      // For Expo Go development, use exp:// scheme
+      if (__DEV__) {
+        // Try to get the Expo dev server URL
+        const expoUrl = process.env.EXPO_PUBLIC_EXPO_URL || 'exp://localhost:8081';
+        redirectUrl = `${expoUrl}/--/auth/callback`;
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
-          data: { name: name.trim() },
+          emailRedirectTo: redirectUrl,
         },
       });
 
@@ -138,6 +153,16 @@ export const AuthProvider = ({ children }) => {
 
       if (!data.user) {
         return { success: false, error: 'User creation failed. Please try again.' };
+      }
+
+      // Check if email confirmation is required
+      // If user needs to confirm email, they won't have a session yet
+      if (!data.session) {
+        return { 
+          success: true, 
+          requiresConfirmation: true,
+          message: 'Account created! Please check your email to confirm your account before signing in.' 
+        };
       }
 
       // Wait a moment for the database trigger to create the user profile
@@ -172,7 +197,6 @@ export const AuthProvider = ({ children }) => {
             .insert({
               id: data.user.id,
               email: data.user.email,
-              name: name.trim(),
               role: 'user',
             });
           
@@ -200,7 +224,6 @@ export const AuthProvider = ({ children }) => {
         user: {
           id: data.user.id,
           email: data.user.email,
-          name: profile?.name || name.trim() || data.user.user_metadata?.name || 'User',
           role: profile?.role || 'user',
         },
         token: data.session?.access_token,
@@ -224,8 +247,7 @@ export const AuthProvider = ({ children }) => {
       const guestUser = {
         id: 0,
         email: 'guest@evsu.edu.ph',
-        name: 'Guest User',
-        role: 'user', // Guest users are regular users, not admin
+        role: 'guest', // Guest users have guest role
       };
       
       const guestToken = 'guest_token_' + Date.now();

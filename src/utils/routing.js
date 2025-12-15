@@ -1,89 +1,31 @@
-// src/utils/routing.js - Routing utilities using OSRM and custom paths
-import axios from 'axios';
+// src/utils/routing.js - Routing utilities using custom campus paths only
+// No external routing services - uses paths created in the database
+
 import { calculateDistance, calculateWalkingTime } from './distance';
-import { API_URL, USE_MOCK_DATA } from '../constants/config';
-
-// OSRM public API endpoint (free, no API key required)
-// Using the demo server - for production, you might want to host your own OSRM instance
-const OSRM_BASE_URL = 'https://router.project-osrm.org';
+import { USE_MOCK_DATA } from '../constants/config';
+import { mapService } from '../services/mapService';
 
 /**
- * Get route from OSRM routing service
- * @param {Object} start - Start coordinate {latitude, longitude}
- * @param {Object} end - End coordinate {latitude, longitude}
- * @param {string} profile - Routing profile: 'driving', 'walking', 'cycling' (default: 'walking')
- * @returns {Promise<Object>} Route data with coordinates, distance, and duration
- */
-export const getOSRMRoute = async (start, end, profile = 'foot') => {
-  try {
-    // OSRM API format: /route/v1/{profile}/{coordinates}?overview=full&geometries=geojson
-    // Coordinates format: longitude,latitude (note: lon first, then lat)
-    const coordinates = `${start.longitude},${start.latitude};${end.longitude},${end.latitude}`;
-    const url = `${OSRM_BASE_URL}/route/v1/${profile}/${coordinates}?overview=full&geometries=geojson&steps=true`;
-    
-    console.log('Fetching route from OSRM:', url);
-    
-    const response = await axios.get(url, {
-      timeout: 10000, // 10 second timeout
-    });
-
-    if (response.data.code === 'Ok' && response.data.routes && response.data.routes.length > 0) {
-      const route = response.data.routes[0];
-      const geometry = route.geometry.coordinates;
-      
-      // Convert GeoJSON coordinates [lon, lat] to [lat, lon] for react-native-maps
-      const coordinates = geometry.map(coord => ({
-        latitude: coord[1],
-        longitude: coord[0],
-      }));
-
-      // Distance in meters, convert to km
-      const distanceKm = route.distance / 1000;
-      
-      // Duration in seconds, convert to minutes
-      const durationMinutes = Math.ceil(route.duration / 60);
-
-      return {
-        success: true,
-        coordinates,
-        distance: distanceKm,
-        duration: durationMinutes,
-        steps: route.legs[0]?.steps || [],
-      };
-    } else {
-      console.warn('OSRM route not found, using fallback');
-      return {
-        success: false,
-        error: 'Route not found',
-      };
-    }
-  } catch (error) {
-    console.error('OSRM routing error:', error.message);
-    return {
-      success: false,
-      error: error.message,
-    };
-  }
-};
-
-/**
- * Get custom paths from API
+ * Get custom paths from Supabase
  * @returns {Promise<Array>} Array of paths with waypoints
  */
-const getCustomPaths = async () => {
+export const getCustomPaths = async () => {
   try {
     if (USE_MOCK_DATA) {
       return []; // No custom paths in mock mode
     }
 
-    const response = await axios.get(`${API_URL}/paths`, {
-      timeout: 5000,
-    });
-
-    if (response.data.success) {
-      return response.data.data || [];
-    }
-    return [];
+    // Use mapService to fetch paths from Supabase
+    const paths = await mapService.getPaths();
+    
+    // Transform to match expected format
+    return paths.map(path => ({
+      path_id: path.id,
+      path_name: path.name,
+      path_type: path.type,
+      is_active: path.is_active,
+      waypoints: path.waypoints || [],
+    }));
   } catch (error) {
     console.error('Error fetching custom paths:', error);
     return [];
@@ -91,21 +33,21 @@ const getCustomPaths = async () => {
 };
 
 /**
- * Find nearest waypoint to a coordinate
+ * Find the nearest waypoint to a given coordinate across all paths
  * @param {Object} coord - Coordinate {latitude, longitude}
  * @param {Array} paths - Array of paths with waypoints
- * @param {number} threshold - Maximum distance in km to consider "near" (default: 0.05 = 50m)
+ * @param {number} threshold - Maximum distance in km to consider "near" (default: 0.5 = 500m)
  * @returns {Object|null} Nearest waypoint info or null
  */
-const findNearestWaypoint = (coord, paths, threshold = 0.05) => {
+const findNearestWaypoint = (coord, paths, threshold = 0.5) => {
   let nearest = null;
   let minDistance = threshold;
 
   paths.forEach(path => {
-    if (!path.is_active || !path.waypoints) return;
+    if (!path.is_active || !path.waypoints || path.waypoints.length === 0) return;
 
-    path.waypoints.forEach(waypoint => {
-      if (!waypoint.is_accessible) return;
+    path.waypoints.forEach((waypoint, index) => {
+      if (waypoint.is_accessible === false) return;
 
       const distance = calculateDistance(coord, {
         latitude: parseFloat(waypoint.latitude),
@@ -117,7 +59,9 @@ const findNearestWaypoint = (coord, paths, threshold = 0.05) => {
         nearest = {
           path_id: path.path_id,
           path_name: path.path_name,
+          path_type: path.path_type,
           waypoint: waypoint,
+          waypointIndex: index,
           distance,
         };
       }
@@ -128,100 +72,180 @@ const findNearestWaypoint = (coord, paths, threshold = 0.05) => {
 };
 
 /**
- * Build route using custom paths
+ * Build a route using a single admin path
  * @param {Object} start - Start coordinate
- * @param {Object} end - End coordinate
- * @param {Array} paths - Custom paths
- * @returns {Object|null} Route data or null if no path found
+ * @param {Object} end - End coordinate (destination building)
+ * @param {Object} path - The path to use
+ * @param {Object} startWaypoint - Nearest waypoint to start
+ * @param {Object} endWaypoint - Nearest waypoint to end
+ * @returns {Object} Route data
  */
-const buildCustomPathRoute = (start, end, paths) => {
-  const startWaypoint = findNearestWaypoint(start, paths);
-  const endWaypoint = findNearestWaypoint(end, paths);
+const buildSinglePathRoute = (start, end, path, startWaypoint, endWaypoint) => {
+  const waypoints = path.waypoints || [];
+  if (waypoints.length < 2) return null;
 
-  // If both start and end are on the same path
-  if (startWaypoint && endWaypoint && startWaypoint.path_id === endWaypoint.path_id) {
-    const path = paths.find(p => p.path_id === startWaypoint.path_id);
-    if (!path || !path.waypoints) return null;
+  // Get waypoints between start and end
+  const startSeq = startWaypoint.waypoint.sequence;
+  const endSeq = endWaypoint.waypoint.sequence;
+  
+  // Determine direction (forward or reverse)
+  const forward = startSeq <= endSeq;
+  const minSeq = Math.min(startSeq, endSeq);
+  const maxSeq = Math.max(startSeq, endSeq);
 
-    // Get waypoints between start and end
-    const startSeq = startWaypoint.waypoint.sequence;
-    const endSeq = endWaypoint.waypoint.sequence;
-    const startIdx = Math.min(startSeq, endSeq);
-    const endIdx = Math.max(startSeq, endSeq);
+  // Get waypoints in the route
+  let routeWaypoints = waypoints
+    .filter(wp => wp.sequence >= minSeq && wp.sequence <= maxSeq && wp.is_accessible !== false)
+    .sort((a, b) => a.sequence - b.sequence);
 
-    const routeWaypoints = path.waypoints
-      .filter(wp => wp.sequence >= startIdx && wp.sequence <= endIdx && wp.is_accessible)
-      .sort((a, b) => a.sequence - b.sequence);
-
-    if (routeWaypoints.length < 2) return null;
-
-    // Convert to coordinates
-    const coordinates = [
-      start, // Start from user location
-      ...routeWaypoints.map(wp => ({
-        latitude: parseFloat(wp.latitude),
-        longitude: parseFloat(wp.longitude),
-      })),
-      end, // End at destination
-    ];
-
-    // Calculate total distance
-    let totalDistance = 0;
-    for (let i = 0; i < coordinates.length - 1; i++) {
-      totalDistance += calculateDistance(coordinates[i], coordinates[i + 1]);
-    }
-
-    return {
-      success: true,
-      coordinates,
-      distance: totalDistance,
-      duration: calculateWalkingTime(totalDistance),
-      steps: [],
-      isCustomPath: true,
-    };
+  // Reverse if needed
+  if (!forward) {
+    routeWaypoints = routeWaypoints.reverse();
   }
 
-  // TODO: Handle routing between different paths (requires path connections)
+  if (routeWaypoints.length === 0) return null;
+
+  // Build coordinates array: start -> waypoints -> end
+  const coordinates = [
+    start, // User's current location
+    ...routeWaypoints.map(wp => ({
+      latitude: parseFloat(wp.latitude),
+      longitude: parseFloat(wp.longitude),
+    })),
+    end, // Destination building
+  ];
+
+  // Calculate total distance
+  let totalDistance = 0;
+  for (let i = 0; i < coordinates.length - 1; i++) {
+    totalDistance += calculateDistance(coordinates[i], coordinates[i + 1]);
+  }
+
+  return {
+    success: true,
+    coordinates,
+    distance: totalDistance,
+    duration: calculateWalkingTime(totalDistance),
+      pathName: path.path_name,
+      pathType: path.path_type,
+      isCustomPath: true,
+    };
+};
+
+/**
+ * Find the best path between two points using custom paths
+ * Picks the path where endpoints are closest to start and end
+ * @param {Object} start - Start coordinate {latitude, longitude}
+ * @param {Object} end - End coordinate {latitude, longitude}
+ * @param {Array} paths - Array of custom paths
+ * @returns {Object|null} Best route or null if no suitable path found
+ */
+export const findBestCustomPath = (start, end, paths) => {
+  if (!paths || paths.length === 0) return null;
+
+  let bestRoute = null;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  paths.forEach(path => {
+    const waypoints = path.waypoints || [];
+    if (waypoints.length < 2) return;
+
+    // Find nearest waypoints on this path to start and end
+    let nearestToStart = null;
+    let nearestToEnd = null;
+    let minDistStart = Number.POSITIVE_INFINITY;
+    let minDistEnd = Number.POSITIVE_INFINITY;
+
+    waypoints.forEach(wp => {
+      if (wp.is_accessible === false) return;
+
+      const wpCoord = {
+        latitude: parseFloat(wp.latitude),
+        longitude: parseFloat(wp.longitude),
+      };
+
+      const distToStart = calculateDistance(start, wpCoord);
+      const distToEnd = calculateDistance(end, wpCoord);
+
+      if (distToStart < minDistStart) {
+        minDistStart = distToStart;
+        nearestToStart = { waypoint: wp, distance: distToStart };
+      }
+      if (distToEnd < minDistEnd) {
+        minDistEnd = distToEnd;
+        nearestToEnd = { waypoint: wp, distance: distToEnd };
+      }
+    });
+
+    if (!nearestToStart || !nearestToEnd) return;
+
+    // Score = sum of distances from start/end to their nearest waypoints
+    const score = minDistStart + minDistEnd;
+
+    if (score < bestScore) {
+      bestScore = score;
+      
+      // Build route using this path
+      const route = buildSinglePathRoute(start, end, path, nearestToStart, nearestToEnd);
+      if (route) {
+        bestRoute = {
+          ...route,
+          score,
+          startDistance: minDistStart,
+          endDistance: minDistEnd,
+        };
+      }
+    }
+  });
+
+  // Only return if the path is reasonably close (within 500m combined distance to start/end)
+  if (bestRoute && bestScore <= 0.5) {
+    return bestRoute;
+  }
+
   return null;
 };
 
 /**
- * Calculate route with fallback to straight line if OSRM fails
+ * Calculate route using custom campus paths only
+ * No external routing services - purely uses paths from the database
  * @param {Object} start - Start coordinate {latitude, longitude}
  * @param {Object} end - End coordinate {latitude, longitude}
  * @returns {Promise<Object>} Route data
  */
 export const calculateRoute = async (start, end) => {
-  // Try custom paths first (if available)
+  console.log('Calculating campus route from', start, 'to', end);
+
+  // Try to get custom paths
   if (!USE_MOCK_DATA) {
     try {
       const customPaths = await getCustomPaths();
+      
       if (customPaths.length > 0) {
-        const customRoute = buildCustomPathRoute(start, end, customPaths);
-        if (customRoute) {
-          console.log('Using custom path route');
-          return customRoute;
+        const route = findBestCustomPath(start, end, customPaths);
+        if (route) {
+          console.log('✅ Using custom path:', route.pathName);
+          return route;
+        } else {
+          console.log('⚠️ No suitable custom path found for this route');
         }
+      } else {
+        console.log('⚠️ No custom paths available in database');
       }
     } catch (error) {
-      console.warn('Custom path routing failed, trying OSRM:', error);
+      console.error('Error finding custom path:', error);
     }
   }
 
-  // Try OSRM second
-  const osrmRoute = await getOSRMRoute(start, end);
+  // Fallback: Direct line to destination (no external routing)
+  // This is only used when no custom path covers the route
+  console.log('📍 Using direct route (no custom path available)');
   
-  if (osrmRoute.success) {
-    return osrmRoute;
-  }
-
-  // Fallback to straight line with intermediate points for smoother appearance
-  console.log('Using fallback route calculation');
   const distance = calculateDistance(start, end);
-  const timeMinutes = calculateWalkingTime(distance);
-  
-  // Create intermediate points for a smoother line (simulates following paths)
-  const numPoints = Math.max(3, Math.ceil(distance * 10)); // More points for longer distances
+  const duration = calculateWalkingTime(distance);
+
+  // Create a simple direct line with a few intermediate points
+  const numPoints = Math.max(2, Math.ceil(distance * 5));
   const coordinates = [];
   
   for (let i = 0; i <= numPoints; i++) {
@@ -236,29 +260,43 @@ export const calculateRoute = async (start, end) => {
     success: true,
     coordinates,
     distance,
-    duration: timeMinutes,
-    steps: [],
-    isFallback: true,
+    duration,
+    isDirectRoute: true, // Flag to indicate this is not a real path
+    message: 'No custom path available for this route. Showing direct line.',
   };
 };
 
 /**
- * Get route instructions/steps
- * @param {Array} steps - Route steps from OSRM
- * @returns {Array} Formatted step instructions
+ * Check if custom paths are available
+ * @returns {Promise<boolean>} True if paths exist
  */
-export const getRouteInstructions = (steps) => {
-  if (!steps || steps.length === 0) return [];
+export const hasCustomPaths = async () => {
+  if (USE_MOCK_DATA) return false;
   
-  return steps.map((step, index) => {
-    const instruction = step.maneuver?.instruction || `Step ${index + 1}`;
-    const distance = step.distance ? (step.distance / 1000).toFixed(2) : '0';
-    
-    return {
-      instruction,
-      distance: `${distance} km`,
-      type: step.maneuver?.type || 'turn',
-    };
-  });
+  try {
+    const paths = await getCustomPaths();
+    return paths.length > 0;
+  } catch {
+    return false;
+  }
 };
 
+/**
+ * Get route summary text
+ * @param {Object} route - Route data from calculateRoute
+ * @returns {string} Human-readable route summary
+ */
+export const getRouteSummary = (route) => {
+  if (!route) return 'No route available';
+
+  const distanceText = `${route.distance.toFixed(2)} km`;
+  const timeText = `${route.duration} min walk`;
+
+  if (route.isCustomPath) {
+    return `📍 ${route.pathName || 'Campus Path'}\n${distanceText} • ${timeText}`;
+  } else if (route.isDirectRoute) {
+    return `📍 Direct Route\n${distanceText} • ${timeText}\n(No custom path available)`;
+  }
+
+  return `${distanceText} • ${timeText}`;
+};

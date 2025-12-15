@@ -23,7 +23,9 @@ export const mapService = {
         category: 'academic',
         description: b.description,
         image_url: null,
-        floors: b.floors || 1,
+        width_meters: 20.0,
+        height_meters: 20.0,
+        rotation_degrees: 0.0,
       }));
     }
 
@@ -51,7 +53,9 @@ export const mapService = {
             category: 'academic',
             description: b.description,
             image_url: null,
-            floors: b.floors || 1,
+            width_meters: 20.0,
+            height_meters: 20.0,
+            rotation_degrees: 0.0,
           }));
         }
         console.error('Error fetching buildings:', error);
@@ -71,7 +75,10 @@ export const mapService = {
         category: building.category || 'academic',
         description: building.description,
         image_url: building.image_url,
-        floors: 1, // Default, can be added to schema later
+        // Building dimensions for map visualization
+        width_meters: parseFloat(building.width_meters) || 20.0,
+        height_meters: parseFloat(building.height_meters) || 20.0,
+        rotation_degrees: parseFloat(building.rotation_degrees) || 0.0,
       }));
     } catch (error) {
       console.error('Error in getBuildings:', error);
@@ -87,7 +94,9 @@ export const mapService = {
         longitude: parseFloat(b.longitude),
         category: 'academic',
         description: b.description,
-        floors: b.floors || 1,
+        width_meters: 20.0,
+        height_meters: 20.0,
+        rotation_degrees: 0.0,
       }));
     }
   },
@@ -118,7 +127,9 @@ export const mapService = {
           longitude: parseFloat(b.longitude),
           category: 'academic',
           description: b.description,
-          floors: b.floors || 1,
+          width_meters: 20.0,
+          height_meters: 20.0,
+          rotation_degrees: 0.0,
         }));
     }
 
@@ -152,7 +163,9 @@ export const mapService = {
               longitude: parseFloat(b.longitude),
               category: 'academic',
               description: b.description,
-              floors: b.floors || 1,
+              width_meters: 20.0,
+              height_meters: 20.0,
+              rotation_degrees: 0.0,
             }));
         }
         throw error;
@@ -171,7 +184,9 @@ export const mapService = {
         description: building.description,
         image_url: building.image_url,
         locations: building.locations || [],
-        floors: 1,
+        width_meters: parseFloat(building.width_meters) || 20.0,
+        height_meters: parseFloat(building.height_meters) || 20.0,
+        rotation_degrees: parseFloat(building.rotation_degrees) || 0.0,
       }));
     } catch (error) {
       console.error('Error in search:', error);
@@ -201,7 +216,9 @@ export const mapService = {
         category: 'academic',
         description: b.description,
         distance_meters: 0,
-        floors: b.floors || 1,
+        width_meters: 20.0,
+        height_meters: 20.0,
+        rotation_degrees: 0.0,
       }));
     }
 
@@ -226,7 +243,9 @@ export const mapService = {
         longitude: parseFloat(building.longitude),
         category: building.category,
         distance_meters: parseFloat(building.distance_meters),
-        floors: 1,
+        width_meters: 20.0, // nearby_buildings function doesn't return these
+        height_meters: 20.0,
+        rotation_degrees: 0.0,
       }));
     } catch (error) {
       console.error('Error in getNearby:', error);
@@ -316,54 +335,6 @@ export const mapService = {
       }
       console.error('Error in getBuildingDetails:', error);
       return null;
-    }
-  },
-
-  /**
-   * Get points of interest
-   * @param {string|null} category - Optional category filter
-   * @returns {Promise<Array>} Array of POIs
-   */
-  async getPOIs(category = null) {
-    if (!isSupabaseConfigured()) {
-      return [];
-    }
-
-    try {
-      let query = supabase
-        .from('points_of_interest')
-        .select('*');
-
-      if (category) {
-        query = query.eq('category', category);
-      }
-
-      const { data, error } = await query;
-
-      if (error) {
-        // Handle schema cache errors gracefully
-        if (error.code === 'PGRST205' || 
-            (error.message && error.message.includes('schema cache'))) {
-          console.warn('Points of interest table not found in database. Please run database-setup.sql');
-          return [];
-        }
-        throw error;
-      }
-
-      return data.map(poi => ({
-        ...poi,
-        latitude: parseFloat(poi.latitude),
-        longitude: parseFloat(poi.longitude),
-      }));
-    } catch (error) {
-      // Handle any other errors gracefully
-      if (error.code === 'PGRST205' || 
-          (error.message && error.message.includes('schema cache'))) {
-        console.warn('Points of interest table not found in database. Please run database-setup.sql');
-        return [];
-      }
-      console.error('Error in getPOIs:', error);
-      return [];
     }
   },
 

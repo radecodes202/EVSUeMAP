@@ -5,6 +5,10 @@ export const USE_MOCK_DATA = false; // Set to false to try API first, then fallb
 
 export const API_TIMEOUT = 5000; // 5 seconds
 
+// API URL for legacy REST API endpoints (if using separate backend)
+// If using Supabase directly, this is not needed
+export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+
 // EVSU Tacloban Campus center coordinates
 export const EVSU_CENTER = {
   latitude: 11.2443,

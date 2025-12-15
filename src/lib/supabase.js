@@ -6,8 +6,8 @@ import { USE_MOCK_DATA } from '../constants/config';
 
 // Supabase configuration
 // Optionally supply via env: EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://audzjcrkclatnfadswpd.supabase.co';
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_o3JoV2XIbdq7y81nHLeKYg_F86mHZNK';
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || 'https://ffjrllitnfabijtvndws.supabase.co';
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmanJsbGl0bmZhYmlqdHZuZHdzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU3NzE1MDUsImV4cCI6MjA4MTM0NzUwNX0.m9pzUGZxqDFUbH15ddsuf8zV1mzIxUDTo5O7ydg_KcY';
 
 // Create Supabase client
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

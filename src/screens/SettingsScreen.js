@@ -73,11 +73,10 @@ const SettingsScreen = () => {
         <View style={styles.avatar}>
           <Ionicons name="person" size={32} color={Colors.primary} />
         </View>
-        <Text style={styles.userName}>{user?.name || 'User'}</Text>
         <Text style={styles.userEmail}>{user?.email || 'No email'}</Text>
         <View style={styles.roleBadge}>
           <Text style={styles.roleText}>
-            {isAdmin() ? 'Administrator' : user?.role === 'user' ? 'Guest User' : 'User'}
+            {isAdmin() ? 'Administrator' : user?.role === 'guest' ? 'Guest User' : 'User'}
           </Text>
         </View>
       </View>
@@ -187,14 +186,9 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: Colors.primary,
   },
-  userName: {
-    ...Typography.h2,
-    color: Colors.text,
-    marginBottom: Spacing.xs,
-  },
   userEmail: {
-    ...Typography.bodySmall,
-    color: Colors.textSecondary,
+    ...Typography.h3,
+    color: Colors.text,
     marginBottom: Spacing.sm,
   },
   roleBadge: {

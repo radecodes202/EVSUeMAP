@@ -435,5 +435,111 @@ export const mapService = {
       return [];
     }
   },
+
+  /**
+   * Get path connections (for cross-path routing)
+   * @returns {Promise<Array>} Array of path connections
+   */
+  async getPathConnections() {
+    if (!isSupabaseConfigured()) {
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('path_connections')
+        .select(`
+          connection_id,
+          from_path_id,
+          from_waypoint_id,
+          to_path_id,
+          to_waypoint_id,
+          connection_type,
+          is_bidirectional,
+          distance_meters,
+          is_accessible
+        `)
+        .eq('is_accessible', true);
+
+      if (error) {
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Path connections table not found in database.');
+          return [];
+        }
+        throw error;
+      }
+
+      return (data || []).map(conn => ({
+        id: conn.connection_id,
+        from_path_id: conn.from_path_id,
+        from_waypoint_id: conn.from_waypoint_id,
+        to_path_id: conn.to_path_id,
+        to_waypoint_id: conn.to_waypoint_id,
+        connection_type: conn.connection_type,
+        is_bidirectional: conn.is_bidirectional,
+        distance_meters: parseFloat(conn.distance_meters) || 0,
+      }));
+    } catch (error) {
+      console.error('Error fetching path connections:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get campus settings (center and boundaries)
+   * @returns {Promise<Object|null>} Campus settings or null
+   */
+  async getCampusSettings() {
+    if (!isSupabaseConfigured()) {
+      return null;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('campus_settings')
+        .select('*')
+        .eq('id', 1)
+        .single();
+
+      if (error) {
+        // Handle schema cache errors gracefully
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Campus settings table not found in database. Using default config.');
+          return null;
+        }
+        throw error;
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      // Transform to match expected format
+      return {
+        campusName: data.campus_name,
+        center: {
+          latitude: parseFloat(data.center_latitude),
+          longitude: parseFloat(data.center_longitude),
+          latitudeDelta: parseFloat(data.center_latitude_delta),
+          longitudeDelta: parseFloat(data.center_longitude_delta),
+        },
+        boundaries: {
+          northEast: {
+            latitude: parseFloat(data.boundary_north_latitude),
+            longitude: parseFloat(data.boundary_east_longitude),
+          },
+          southWest: {
+            latitude: parseFloat(data.boundary_south_latitude),
+            longitude: parseFloat(data.boundary_west_longitude),
+          },
+        },
+      };
+    } catch (error) {
+      console.error('Error fetching campus settings:', error);
+      return null;
+    }
+  },
 };
 

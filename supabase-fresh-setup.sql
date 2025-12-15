@@ -241,6 +241,55 @@ CREATE TRIGGER user_feedback_updated_at
   BEFORE UPDATE ON user_feedback
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+-- Campus settings (admin-configurable campus boundaries and center)
+-- Only one row should exist - admins update this row
+CREATE TABLE campus_settings (
+  id SERIAL PRIMARY KEY,
+  campus_name TEXT DEFAULT 'EVSU Campus',
+  center_latitude DECIMAL(15, 12) NOT NULL,
+  center_longitude DECIMAL(15, 12) NOT NULL,
+  center_latitude_delta DECIMAL(10, 6) DEFAULT 0.01,
+  center_longitude_delta DECIMAL(10, 6) DEFAULT 0.01,
+  boundary_north_latitude DECIMAL(15, 12) NOT NULL,
+  boundary_east_longitude DECIMAL(15, 12) NOT NULL,
+  boundary_south_latitude DECIMAL(15, 12) NOT NULL,
+  boundary_west_longitude DECIMAL(15, 12) NOT NULL,
+  updated_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT single_row CHECK (id = 1)
+);
+
+CREATE TRIGGER campus_settings_updated_at
+  BEFORE UPDATE ON campus_settings
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- Insert default campus settings (EVSU Tacloban)
+-- Admins can update this row via admin panel
+INSERT INTO campus_settings (
+  id,
+  campus_name,
+  center_latitude,
+  center_longitude,
+  center_latitude_delta,
+  center_longitude_delta,
+  boundary_north_latitude,
+  boundary_east_longitude,
+  boundary_south_latitude,
+  boundary_west_longitude
+) VALUES (
+  1,
+  'EVSU Tacloban Campus',
+  11.239173,
+  124.997,
+  0.01,
+  0.01,
+  11.26,
+  125.02,
+  11.23,
+  124.99
+);
+
 -- ============================================================================
 -- STEP 5: ROW LEVEL SECURITY
 -- ============================================================================
@@ -256,6 +305,7 @@ ALTER TABLE favorites ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE campus_settings ENABLE ROW LEVEL SECURITY;
 
 -- Users policies
 CREATE POLICY "Users can view own data" ON public.users FOR SELECT USING (auth.uid() = id);

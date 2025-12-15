@@ -40,6 +40,8 @@ const MapScreen = ({ navigation, route }) => {
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [campusCenter, setCampusCenter] = useState(EVSU_CENTER);
+  const [campusBoundaries, setCampusBoundaries] = useState(CAMPUS_BOUNDARIES);
   const [mapRegion, setMapRegion] = useState(EVSU_CENTER);
   const [paths, setPaths] = useState([]);
   const [mapType, setMapType] = useState('standard');
@@ -48,19 +50,39 @@ const MapScreen = ({ navigation, route }) => {
   const metersToLatDegrees = (meters) => meters / 111320;
   const metersToLngDegrees = (meters, latitude) => meters / (111320 * Math.cos(latitude * Math.PI / 180));
 
+  // Fetch campus settings from database
+  useEffect(() => {
+    const loadCampusSettings = async () => {
+      try {
+        const settings = await mapService.getCampusSettings();
+        if (settings) {
+          console.log('✅ Loaded campus settings from database');
+          setCampusCenter(settings.center);
+          setCampusBoundaries(settings.boundaries);
+          setMapRegion(settings.center);
+          
+          // Center map on campus after settings load
+          setTimeout(() => {
+            if (mapRef.current) {
+              mapRef.current.animateToRegion(settings.center, MAP_ANIMATION_DURATION);
+            }
+          }, 100);
+        } else {
+          console.log('⚠️ Using default campus settings from config');
+        }
+      } catch (error) {
+        console.warn('Error loading campus settings:', error);
+      }
+    };
+    loadCampusSettings();
+  }, []);
+
   // Fetch buildings when component loads
   useEffect(() => {
     console.log('MapScreen loaded');
     fetchBuildings();
     fetchPaths();
     requestLocationPermission();
-    
-    // Center map on campus when component mounts
-    setTimeout(() => {
-      if (mapRef.current) {
-        mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
-      }
-    }, 500);
 
     // Subscribe to real-time building updates
     const unsubscribe = mapService.subscribeToBuildings((payload) => {
@@ -207,18 +229,32 @@ const MapScreen = ({ navigation, route }) => {
         // Get formatted summary
         const summary = getRouteSummary(routeData);
         
-        if (routeData.isCustomPath) {
-          // Successfully using custom path
+        if (routeData.isHybridRoute) {
+          // Hybrid route: OSRM + custom paths
+          Alert.alert(
+            '🌍 Hybrid Route',
+            summary,
+            [{ text: 'OK' }]
+          );
+        } else if (routeData.isOSRMRoute) {
+          // OSRM route (outside campus)
+          Alert.alert(
+            '🌍 Route Found',
+            summary,
+            [{ text: 'OK' }]
+          );
+        } else if (routeData.isCustomPath) {
+          // Custom campus path
           Alert.alert(
             '🗺️ Route Found',
             summary,
             [{ text: 'OK' }]
           );
         } else if (routeData.isDirectRoute) {
-          // No custom path available - showing direct line
+          // Direct line fallback
           Alert.alert(
             '📍 Direct Route',
-            `${summary}\n\nNo custom path covers this route yet.`,
+            `${summary}\n\nNo routing available. Showing direct line.`,
             [{ text: 'OK' }]
           );
         }
@@ -269,7 +305,7 @@ const MapScreen = ({ navigation, route }) => {
   // Check if region is within campus boundaries
   const isWithinCampusBounds = (region) => {
     const { latitude, longitude } = region;
-    const { northEast, southWest } = CAMPUS_BOUNDARIES;
+    const { northEast, southWest } = campusBoundaries;
     
     return (
       latitude >= southWest.latitude &&
@@ -285,9 +321,9 @@ const MapScreen = ({ navigation, route }) => {
     // If user pans too far, gently guide back
     if (!isWithinCampusBounds(region)) {
       // Snap back to campus center if outside boundaries
-      setMapRegion(EVSU_CENTER);
+      setMapRegion(campusCenter);
       if (mapRef.current) {
-        mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
+        mapRef.current.animateToRegion(campusCenter, MAP_ANIMATION_DURATION);
       }
     } else {
       // Update region if within bounds
@@ -298,9 +334,9 @@ const MapScreen = ({ navigation, route }) => {
   // Center map on campus
   const centerOnCampus = () => {
     console.log('Centering on campus');
-    setMapRegion(EVSU_CENTER);
+    setMapRegion(campusCenter);
     if (mapRef.current) {
-      mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
+      mapRef.current.animateToRegion(campusCenter, MAP_ANIMATION_DURATION);
     }
   };
 
@@ -394,7 +430,7 @@ const MapScreen = ({ navigation, route }) => {
 
   // Web fallback - show a simple map placeholder with building list
   if (Platform.OS === 'web') {
-    const mapUrl = `https://www.openstreetmap.org/?mlat=${EVSU_CENTER.latitude}&mlon=${EVSU_CENTER.longitude}&zoom=16`;
+    const mapUrl = `https://www.openstreetmap.org/?mlat=${campusCenter.latitude}&mlon=${campusCenter.longitude}&zoom=16`;
     
     return (
       <View style={styles.container}>
@@ -476,7 +512,7 @@ const MapScreen = ({ navigation, route }) => {
         ref={mapRef}
         provider={PROVIDER_DEFAULT}
         style={styles.map}
-        initialRegion={EVSU_CENTER}
+        initialRegion={campusCenter}
         region={mapRegion}
         onRegionChangeComplete={handleRegionChangeComplete}
         onMapReady={() => {

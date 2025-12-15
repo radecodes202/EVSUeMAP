@@ -34,6 +34,26 @@ export const mapService = {
         .order('name');
 
       if (error) {
+        // Handle schema cache errors gracefully
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Buildings table not found in database. Please run database-setup.sql');
+          // Fallback to mock data
+          return mockBuildings.map(b => ({
+            id: b.building_id.toString(),
+            building_id: b.building_id,
+            name: b.building_name,
+            building_name: b.building_name,
+            code: b.building_code,
+            building_code: b.building_code,
+            latitude: parseFloat(b.latitude),
+            longitude: parseFloat(b.longitude),
+            category: 'academic',
+            description: b.description,
+            image_url: null,
+            floors: b.floors || 1,
+          }));
+        }
         console.error('Error fetching buildings:', error);
         throw error;
       }
@@ -108,7 +128,35 @@ export const mapService = {
         .select('*, locations(*)')
         .or(`name.ilike.%${query}%,code.ilike.%${query}%,description.ilike.%${query}%`);
 
-      if (error) throw error;
+      if (error) {
+        // Handle schema cache errors gracefully
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Buildings table not found in database. Please run database-setup.sql');
+          // Fallback to mock data search
+          const lowerQuery = query.toLowerCase();
+          return mockBuildings
+            .filter(b => 
+              b.building_name.toLowerCase().includes(lowerQuery) ||
+              b.building_code.toLowerCase().includes(lowerQuery) ||
+              (b.description && b.description.toLowerCase().includes(lowerQuery))
+            )
+            .map(b => ({
+              id: b.building_id.toString(),
+              building_id: b.building_id,
+              name: b.building_name,
+              building_name: b.building_name,
+              code: b.building_code,
+              building_code: b.building_code,
+              latitude: parseFloat(b.latitude),
+              longitude: parseFloat(b.longitude),
+              category: 'academic',
+              description: b.description,
+              floors: b.floors || 1,
+            }));
+        }
+        throw error;
+      }
 
       return data.map(building => ({
         id: building.id,
@@ -216,7 +264,29 @@ export const mapService = {
         .eq('id', buildingId)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Handle schema cache errors gracefully
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Buildings table not found in database. Please run database-setup.sql');
+          // Try to find in mock data
+          const building = mockBuildings.find(b => b.building_id.toString() === buildingId);
+          if (building) {
+            return {
+              id: building.building_id.toString(),
+              name: building.building_name,
+              code: building.building_code,
+              latitude: parseFloat(building.latitude),
+              longitude: parseFloat(building.longitude),
+              category: 'academic',
+              description: building.description,
+              locations: [],
+            };
+          }
+          return null;
+        }
+        throw error;
+      }
 
       return {
         ...data,
@@ -225,6 +295,25 @@ export const mapService = {
         locations: data.locations || [],
       };
     } catch (error) {
+      // Handle any other errors gracefully
+      if (error.code === 'PGRST205' || 
+          (error.message && error.message.includes('schema cache'))) {
+        console.warn('Buildings table not found in database. Please run database-setup.sql');
+        const building = mockBuildings.find(b => b.building_id.toString() === buildingId);
+        if (building) {
+          return {
+            id: building.building_id.toString(),
+            name: building.building_name,
+            code: building.building_code,
+            latitude: parseFloat(building.latitude),
+            longitude: parseFloat(building.longitude),
+            category: 'academic',
+            description: building.description,
+            locations: [],
+          };
+        }
+        return null;
+      }
       console.error('Error in getBuildingDetails:', error);
       return null;
     }
@@ -251,7 +340,15 @@ export const mapService = {
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        // Handle schema cache errors gracefully
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Points of interest table not found in database. Please run database-setup.sql');
+          return [];
+        }
+        throw error;
+      }
 
       return data.map(poi => ({
         ...poi,
@@ -259,6 +356,12 @@ export const mapService = {
         longitude: parseFloat(poi.longitude),
       }));
     } catch (error) {
+      // Handle any other errors gracefully
+      if (error.code === 'PGRST205' || 
+          (error.message && error.message.includes('schema cache'))) {
+        console.warn('Points of interest table not found in database. Please run database-setup.sql');
+        return [];
+      }
       console.error('Error in getPOIs:', error);
       return [];
     }
@@ -313,7 +416,7 @@ export const mapService = {
           path_name,
           path_type,
           is_active,
-          waypoints:path_id (
+          waypoints (
             waypoint_id,
             sequence,
             latitude,
@@ -324,7 +427,15 @@ export const mapService = {
         `)
         .eq('is_active', true);
 
-      if (error) throw error;
+      if (error) {
+        // Handle schema cache errors gracefully
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Paths table not found in database. Please run database-setup.sql');
+          return [];
+        }
+        throw error;
+      }
 
       return (data || []).map((path) => ({
         id: path.path_id,
@@ -343,6 +454,12 @@ export const mapService = {
           })),
       }));
     } catch (error) {
+      // Handle any other errors gracefully
+      if (error.code === 'PGRST205' || 
+          (error.message && error.message.includes('schema cache'))) {
+        console.warn('Paths table not found in database. Please run database-setup.sql');
+        return [];
+      }
       console.error('Error fetching paths:', error);
       return [];
     }

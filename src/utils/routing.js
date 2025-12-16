@@ -1,9 +1,9 @@
-// src/utils/routing.js - Routing utilities using custom campus paths only
-// No external routing services - uses paths created in the database
+// src/utils/routing.js - Routing utilities using custom campus paths with OSRM fallback
 
 import { calculateDistance, calculateWalkingTime } from './distance';
 import { USE_MOCK_DATA } from '../constants/config';
 import { mapService } from '../services/mapService';
+import axios from 'axios';
 
 /**
  * Get custom paths from Supabase
@@ -207,8 +207,55 @@ export const findBestCustomPath = (start, end, paths) => {
 };
 
 /**
- * Calculate route using custom campus paths only
- * No external routing services - purely uses paths from the database
+ * Get route from OSRM (Open Source Routing Machine)
+ * @param {Object} start - Start coordinate {latitude, longitude}
+ * @param {Object} end - End coordinate {latitude, longitude}
+ * @returns {Promise<Object|null>} Route data or null if OSRM fails
+ */
+const getOSRMRoute = async (start, end) => {
+  try {
+    // OSRM uses longitude,latitude format (not lat,lon)
+    const coordsString = `${start.longitude},${start.latitude};${end.longitude},${end.latitude}`;
+    
+    // Use foot profile for walking routes
+    const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordsString}?overview=full&geometries=geojson`;
+    
+    const response = await axios.get(osrmUrl, { timeout: 10000 });
+    
+    if (response.data && response.data.code === 'Ok' && response.data.routes && response.data.routes.length > 0) {
+      const route = response.data.routes[0];
+      const geometry = route.geometry;
+      
+      // Convert GeoJSON coordinates [lon, lat] to our format {latitude, longitude}
+      const coordinates = geometry.coordinates.map(coord => ({
+        longitude: coord[0],
+        latitude: coord[1],
+      }));
+      
+      // Distance is in meters, convert to km
+      const distanceKm = route.distance / 1000;
+      
+      // Duration is in seconds, convert to minutes
+      const durationMin = Math.ceil(route.duration / 60);
+      
+      return {
+        success: true,
+        coordinates,
+        distance: distanceKm,
+        duration: durationMin,
+        isOSRMRoute: true,
+      };
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Error fetching OSRM route:', error);
+    return null;
+  }
+};
+
+/**
+ * Calculate route using custom campus paths with OSRM fallback
  * @param {Object} start - Start coordinate {latitude, longitude}
  * @param {Object} end - End coordinate {latitude, longitude}
  * @returns {Promise<Object>} Route data
@@ -216,7 +263,7 @@ export const findBestCustomPath = (start, end, paths) => {
 export const calculateRoute = async (start, end) => {
   console.log('Calculating campus route from', start, 'to', end);
 
-  // Try to get custom paths
+  // Try to get custom paths first
   if (!USE_MOCK_DATA) {
     try {
       const customPaths = await getCustomPaths();
@@ -237,10 +284,17 @@ export const calculateRoute = async (start, end) => {
     }
   }
 
-  // Fallback: Direct line to destination (no external routing)
-  // This is only used when no custom path covers the route
-  console.log('📍 Using direct route (no custom path available)');
+  // Fallback: Try OSRM for real routing
+  console.log('📍 Attempting OSRM route...');
+  const osrmRoute = await getOSRMRoute(start, end);
   
+  if (osrmRoute) {
+    console.log('✅ Using OSRM route');
+    return osrmRoute;
+  }
+
+  // Final fallback: Direct line (only if OSRM also fails)
+  console.log('⚠️ OSRM failed, using direct route as last resort');
   const distance = calculateDistance(start, end);
   const duration = calculateWalkingTime(distance);
 
@@ -261,8 +315,8 @@ export const calculateRoute = async (start, end) => {
     coordinates,
     distance,
     duration,
-    isDirectRoute: true, // Flag to indicate this is not a real path
-    message: 'No custom path available for this route. Showing direct line.',
+    isDirectRoute: true,
+    message: 'No custom path or OSRM route available. Showing direct line.',
   };
 };
 
@@ -294,8 +348,10 @@ export const getRouteSummary = (route) => {
 
   if (route.isCustomPath) {
     return `📍 ${route.pathName || 'Campus Path'}\n${distanceText} • ${timeText}`;
+  } else if (route.isOSRMRoute) {
+    return `📍 OSRM Route\n${distanceText} • ${timeText}`;
   } else if (route.isDirectRoute) {
-    return `📍 Direct Route\n${distanceText} • ${timeText}\n(No custom path available)`;
+    return `📍 Direct Route\n${distanceText} • ${timeText}\n(No routing available)`;
   }
 
   return `${distanceText} • ${timeText}`;

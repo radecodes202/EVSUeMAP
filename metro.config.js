@@ -11,15 +11,27 @@ config.resolver = {
   platforms: ['ios', 'android', 'native', 'web'],
 };
 
-// Configure transformer to not use Hermes for web
+// Disable Hermes for web - web doesn't support Hermes
 config.transformer = {
   ...config.transformer,
-  getTransformOptions: async () => ({
-    transform: {
-      experimentalImportSupport: false,
-      inlineRequires: true,
-    },
-  }),
+  getTransformOptions: async (entryPoints, options) => {
+    // Force disable Hermes for web platform
+    if (options?.platform === 'web') {
+      return {
+        transform: {
+          experimentalImportSupport: false,
+          inlineRequires: true,
+        },
+        unstable_transformProfile: 'default', // Use default instead of hermes
+      };
+    }
+    return {
+      transform: {
+        experimentalImportSupport: false,
+        inlineRequires: true,
+      },
+    };
+  },
 };
 
 module.exports = config;

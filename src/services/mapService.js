@@ -435,5 +435,153 @@ export const mapService = {
       return [];
     }
   },
+
+  /**
+   * Get all rooms/locations
+   * @returns {Promise<Array>} Array of rooms with building info
+   */
+  async getRooms() {
+    if (!isSupabaseConfigured()) {
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('locations')
+        .select(`
+          *,
+          buildings (
+            id,
+            name,
+            code,
+            latitude,
+            longitude,
+            category
+          )
+        `)
+        .order('name');
+
+      if (error) {
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Locations table not found in database.');
+          return [];
+        }
+        throw error;
+      }
+
+      return (data || []).map(location => ({
+        id: location.id,
+        name: location.name,
+        room_number: location.room_number,
+        floor: location.floor,
+        description: location.description,
+        type: location.type,
+        capacity: location.capacity,
+        building_id: location.building_id,
+        building: location.buildings ? {
+          id: location.buildings.id,
+          name: location.buildings.name,
+          code: location.buildings.code,
+          latitude: parseFloat(location.buildings.latitude),
+          longitude: parseFloat(location.buildings.longitude),
+          category: location.buildings.category,
+        } : null,
+      }));
+    } catch (error) {
+      console.error('Error in getRooms:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Search rooms by query
+   * @param {string} query - Search query
+   * @returns {Promise<Array>} Array of matching rooms with building info
+   */
+  async searchRooms(query) {
+    if (!isSupabaseConfigured()) {
+      return [];
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('locations')
+        .select(`
+          *,
+          buildings (
+            id,
+            name,
+            code,
+            latitude,
+            longitude,
+            category
+          )
+        `)
+        .or(`name.ilike.%${query}%,room_number.ilike.%${query}%,description.ilike.%${query}%`)
+        .order('name');
+
+      if (error) {
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Locations table not found in database.');
+          return [];
+        }
+        throw error;
+      }
+
+      return (data || []).map(location => ({
+        id: location.id,
+        name: location.name,
+        room_number: location.room_number,
+        floor: location.floor,
+        description: location.description,
+        type: location.type,
+        capacity: location.capacity,
+        building_id: location.building_id,
+        building: location.buildings ? {
+          id: location.buildings.id,
+          name: location.buildings.name,
+          code: location.buildings.code,
+          latitude: parseFloat(location.buildings.latitude),
+          longitude: parseFloat(location.buildings.longitude),
+          category: location.buildings.category,
+        } : null,
+      }));
+    } catch (error) {
+      console.error('Error in searchRooms:', error);
+      return [];
+    }
+  },
+
+  /**
+   * Get total room count
+   * @returns {Promise<number>} Total number of rooms
+   */
+  async getRoomCount() {
+    if (!isSupabaseConfigured()) {
+      return 0;
+    }
+
+    try {
+      const { count, error } = await supabase
+        .from('locations')
+        .select('*', { count: 'exact', head: true });
+
+      if (error) {
+        if (error.code === 'PGRST205' || 
+            (error.message && error.message.includes('schema cache'))) {
+          console.warn('Locations table not found in database.');
+          return 0;
+        }
+        throw error;
+      }
+
+      return count || 0;
+    } catch (error) {
+      console.error('Error in getRoomCount:', error);
+      return 0;
+    }
+  },
 };
 

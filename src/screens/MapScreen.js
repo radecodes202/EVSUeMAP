@@ -43,6 +43,7 @@ const MapScreen = ({ navigation, route }) => {
   const [mapRegion, setMapRegion] = useState(EVSU_CENTER);
   const [paths, setPaths] = useState([]);
   const [mapType, setMapType] = useState('standard');
+  const [roomCount, setRoomCount] = useState(0);
   
   // Convert meters to approximate lat/lng degrees (1 degree ≈ 111,320 meters at equator)
   const metersToLatDegrees = (meters) => meters / 111320;
@@ -53,6 +54,7 @@ const MapScreen = ({ navigation, route }) => {
     console.log('MapScreen loaded');
     fetchBuildings();
     fetchPaths();
+    fetchRoomCount();
     requestLocationPermission();
     
     // Center map on campus when component mounts
@@ -164,6 +166,17 @@ const MapScreen = ({ navigation, route }) => {
       setPaths(data);
     } catch (error) {
       console.error('❌ Error fetching paths:', error);
+    }
+  };
+
+  // Fetch total room count
+  const fetchRoomCount = async () => {
+    try {
+      const count = await mapService.getRoomCount();
+      setRoomCount(count);
+      console.log('✅ Room count:', count);
+    } catch (error) {
+      console.error('❌ Error fetching room count:', error);
     }
   };
 
@@ -458,13 +471,21 @@ const MapScreen = ({ navigation, route }) => {
             onClose={clearRoute}
             onNavigate={handleNavigate}
             showNavigate={!!userLocation}
+            room={selectedLocation.room || null}
           />
         )}
 
-        {/* Buildings Count Badge */}
+        {/* Buildings and Rooms Count Badge */}
         <View style={styles.buildingsBadge}>
           <Ionicons name="business" size={16} color={Colors.primary} />
           <Text style={styles.buildingsBadgeText}>{buildings.length} Buildings</Text>
+          {roomCount > 0 && (
+            <>
+              <Text style={styles.buildingsBadgeSeparator}>•</Text>
+              <Ionicons name="cube" size={16} color={Colors.secondary} />
+              <Text style={styles.buildingsBadgeText}>{roomCount} Rooms</Text>
+            </>
+          )}
         </View>
       </View>
     );
@@ -612,13 +633,21 @@ const MapScreen = ({ navigation, route }) => {
           onClose={clearRoute}
           onNavigate={handleNavigate}
           showNavigate={!!userLocation}
+          room={selectedLocation.room || null}
         />
       )}
 
-      {/* Buildings Count Badge */}
+      {/* Buildings and Rooms Count Badge */}
       <View style={styles.buildingsBadge}>
         <Ionicons name="business" size={16} color={Colors.primary} />
         <Text style={styles.buildingsBadgeText}>{buildings.length} Buildings</Text>
+        {roomCount > 0 && (
+          <>
+            <Text style={styles.buildingsBadgeSeparator}>•</Text>
+            <Ionicons name="cube" size={16} color={Colors.secondary} />
+            <Text style={styles.buildingsBadgeText}>{roomCount} Rooms</Text>
+          </>
+        )}
       </View>
     </View>
   );
@@ -656,6 +685,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: Colors.text,
+    marginLeft: 4,
+  },
+  buildingsBadgeSeparator: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginHorizontal: 8,
   },
   webMapContainer: {
     flex: 1,

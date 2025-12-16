@@ -10,17 +10,42 @@ const InfoCard = ({
   description, 
   onClose, 
   onNavigate, 
-  showNavigate = false 
+  showNavigate = false,
+  room = null
 }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.content}>
-          <Text style={styles.title}>{title}</Text>
-          {code && <Text style={styles.code}>{code}</Text>}
+          {room ? (
+            <>
+              <View style={styles.roomHeader}>
+                <Ionicons name="cube" size={18} color={Colors.secondary} />
+                <Text style={styles.roomTitle}>{room.name}</Text>
+              </View>
+              {room.room_number && (
+                <Text style={styles.roomNumber}>Room {room.room_number}</Text>
+              )}
+              {room.floor !== null && room.floor !== undefined && (
+                <Text style={styles.roomFloor}>Floor {room.floor}</Text>
+              )}
+              <Text style={styles.buildingLabel}>in {title}</Text>
+              {code && <Text style={styles.code}>{code}</Text>}
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>{title}</Text>
+              {code && <Text style={styles.code}>{code}</Text>}
+            </>
+          )}
           {description && (
             <Text style={styles.description} numberOfLines={2}>
               {description}
+            </Text>
+          )}
+          {room && room.description && (
+            <Text style={styles.description} numberOfLines={2}>
+              {room.description}
             </Text>
           )}
         </View>
@@ -76,6 +101,34 @@ const styles = StyleSheet.create({
     color: Colors.primary,
     fontWeight: '600',
     marginTop: 2,
+  },
+  roomHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    marginBottom: 4,
+  },
+  roomTitle: {
+    fontSize: Typography.h3.fontSize,
+    fontWeight: Typography.h3.fontWeight,
+    color: Colors.text,
+  },
+  roomNumber: {
+    fontSize: Typography.bodySmall.fontSize,
+    color: Colors.secondary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  roomFloor: {
+    fontSize: Typography.caption.fontSize,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  buildingLabel: {
+    fontSize: Typography.bodySmall.fontSize,
+    color: Colors.textSecondary,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   description: {
     fontSize: 13,

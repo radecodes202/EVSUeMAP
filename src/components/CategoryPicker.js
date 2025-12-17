@@ -3,15 +3,17 @@ import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Colors, Typography, Spacing, BorderRadius } from '../constants/theme';
+import { BUILDING_CATEGORIES_WITH_ALL } from '../constants/categories';
 
 /**
- * CategoryPicker - Reusable picker component for building categories
+ * CategoryPicker - Reusable picker component for categories/types
  * 
  * Features:
  * - Empty string for "show all" (matches admin panel)
  * - Platform-specific styling
  * - Accessibility support
  * - Proper validation handling
+ * - Can be used for building categories or room types
  * 
  * @param {string} selectedValue - Currently selected category (empty string = all)
  * @param {function} onValueChange - Callback when value changes
@@ -21,6 +23,7 @@ import { Colors, Typography, Spacing, BorderRadius } from '../constants/theme';
  * @param {boolean} error - Whether to show error state
  * @param {string} errorMessage - Error message to display
  * @param {boolean} required - Whether field is required
+ * @param {Array} categories - Array of category objects with label and value (optional, defaults to building categories)
  */
 const CategoryPicker = ({
   selectedValue = '',
@@ -31,19 +34,10 @@ const CategoryPicker = ({
   error = false,
   errorMessage = '',
   required = false,
-  accessibilityLabel = 'Select building category',
-  accessibilityHint = 'Choose the category to filter buildings',
+  categories = BUILDING_CATEGORIES_WITH_ALL,
+  accessibilityLabel = 'Select category',
+  accessibilityHint = 'Choose the category to filter',
 }) => {
-  // Building categories matching database schema
-  const categories = [
-    { label: 'All Categories', value: '' },
-    { label: 'Academic', value: 'academic' },
-    { label: 'Administrative', value: 'administrative' },
-    { label: 'Facility', value: 'facility' },
-    { label: 'Sports', value: 'sports' },
-    { label: 'Residential', value: 'residential' },
-    { label: 'Other', value: 'other' },
-  ];
 
   return (
     <View style={[styles.container, style]}>

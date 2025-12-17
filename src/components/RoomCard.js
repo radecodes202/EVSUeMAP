@@ -11,7 +11,10 @@ const RoomCard = ({
   showDistance = false, 
   userLocation = null,
   showNavigate = false,
-  onNavigatePress = null
+  onNavigatePress = null,
+  showFavorite = false,
+  isFavorite = false,
+  onFavoritePress = null
 }) => {
   let distance = null;
   if (showDistance && userLocation && room.building) {
@@ -82,17 +85,35 @@ const RoomCard = ({
             </View>
           )}
           
-          {showNavigate && onNavigatePress && (
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                onNavigatePress(room);
-              }}
-            >
-              <Ionicons name="navigate" size={18} color={Colors.primary} />
-            </TouchableOpacity>
-          )}
+          <View style={styles.footerActions}>
+            {showFavorite && onFavoritePress && (
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onFavoritePress(room);
+                }}
+              >
+                <Ionicons 
+                  name={isFavorite ? "heart" : "heart-outline"} 
+                  size={20} 
+                  color={isFavorite ? Colors.error : Colors.textSecondary} 
+                />
+              </TouchableOpacity>
+            )}
+            
+            {showNavigate && onNavigatePress && (
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  onNavigatePress(room);
+                }}
+              >
+                <Ionicons name="navigate" size={18} color={Colors.primary} />
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </TouchableOpacity>
@@ -178,6 +199,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: Spacing.md,
+  },
+  footerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
   distanceContainer: {
     flexDirection: 'row',

@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import SettingsScreen from '../screens/SettingsScreen';
 import FeedbackScreen from '../screens/FeedbackScreen';
 import HelpScreen from '../screens/HelpScreen';
+import AboutScreen from '../screens/AboutScreen';
 import { Colors } from '../constants/theme';
 
 const Stack = createNativeStackNavigator();
@@ -31,6 +32,11 @@ const SettingsNavigator = () => {
         name="Help"
         component={HelpScreen}
         options={{ title: 'Help & User Guide' }}
+      />
+      <Stack.Screen
+        name="About"
+        component={AboutScreen}
+        options={{ title: 'About' }}
       />
     </Stack.Navigator>
   );

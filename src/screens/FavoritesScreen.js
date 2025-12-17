@@ -11,25 +11,26 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import axios from 'axios';
 
 // Constants
-import { API_URL, API_TIMEOUT, USE_MOCK_DATA } from '../constants/config';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants/theme';
 
 // Utils
-import { getFavorites, removeFavorite } from '../utils/storage';
+import { getFavorites, removeFavorite, getRoomFavorites, removeRoomFavorite } from '../utils/storage';
 import { getErrorMessage } from '../utils/errorHandler';
-import { mockBuildings } from '../utils/mockData';
+import { mapService } from '../services/mapService';
 
 // Components
 import BuildingCard from '../components/BuildingCard';
+import RoomCard from '../components/RoomCard';
 import LoadingView from '../components/LoadingView';
 import ErrorView from '../components/ErrorView';
 
 const FavoritesScreen = ({ navigation, route }) => {
   const [favoriteIds, setFavoriteIds] = useState([]);
+  const [favoriteRoomIds, setFavoriteRoomIds] = useState([]);
   const [favoriteBuildings, setFavoriteBuildings] = useState([]);
+  const [favoriteRooms, setFavoriteRooms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
@@ -41,63 +42,45 @@ const FavoritesScreen = ({ navigation, route }) => {
     }, [])
   );
 
-  // Load favorite building IDs and fetch building data
+  // Load favorite building and room IDs and fetch data
   const loadFavorites = async () => {
     try {
       setLoading(true);
       setErrorMessage('');
       
       // Get favorite IDs from storage
-      const ids = await getFavorites();
-      setFavoriteIds(ids);
+      const buildingIds = await getFavorites();
+      const roomIds = await getRoomFavorites();
+      setFavoriteIds(buildingIds);
+      setFavoriteRoomIds(roomIds);
 
-      if (ids.length === 0) {
-        setFavoriteBuildings([]);
-        setLoading(false);
-        return;
-      }
-
-      // Use mock data if enabled, otherwise fetch from API
-      let allBuildings = [];
-      
-      if (USE_MOCK_DATA) {
-        console.log('📦 Using mock data for development');
-        allBuildings = mockBuildings;
-      } else {
-        const response = await axios.get(`${API_URL}/buildings`, {
-          timeout: API_TIMEOUT,
+      // Load favorite buildings
+      if (buildingIds.length > 0) {
+        const allBuildings = await mapService.getBuildings();
+        const favorites = allBuildings.filter(building => {
+          const buildingId = building.building_id || building.id;
+          return buildingIds.includes(buildingId.toString()) || buildingIds.includes(buildingId);
         });
-
-        if (response.data.success) {
-          allBuildings = response.data.data;
-        }
+        setFavoriteBuildings(favorites);
+      } else {
+        setFavoriteBuildings([]);
       }
 
-      // Filter buildings to only show favorites
-      const favorites = allBuildings.filter(building =>
-        ids.includes(building.building_id.toString()) || 
-        ids.includes(building.building_id)
-      );
-      setFavoriteBuildings(favorites);
+      // Load favorite rooms
+      if (roomIds.length > 0) {
+        const allRooms = await mapService.getRooms();
+        const favorites = allRooms.filter(room => {
+          const roomId = room.id;
+          return roomIds.includes(roomId.toString()) || roomIds.includes(roomId);
+        });
+        setFavoriteRooms(favorites);
+      } else {
+        setFavoriteRooms([]);
+      }
       
       setLoading(false);
     } catch (error) {
       console.error('Error loading favorites:', error);
-      
-      // Fallback to mock data in development
-      const isDev = typeof __DEV__ !== 'undefined' && __DEV__;
-      if (isDev || USE_MOCK_DATA) {
-        console.log('📦 Falling back to mock data');
-        const favorites = mockBuildings.filter(building =>
-          ids.includes(building.building_id.toString()) || 
-          ids.includes(building.building_id)
-        );
-        setFavoriteBuildings(favorites);
-        setLoading(false);
-        setErrorMessage('');
-        return;
-      }
-      
       const errorMsg = getErrorMessage(error);
       setErrorMessage(errorMsg);
       setLoading(false);
@@ -111,18 +94,37 @@ const FavoritesScreen = ({ navigation, route }) => {
     setRefreshing(false);
   };
 
-  // Handle remove favorite
+  // Handle remove building favorite
   const handleRemoveFavorite = (building) => {
     Alert.alert(
       'Remove Favorite',
-      `Remove ${building.building_name} from favorites?`,
+      `Remove ${building.building_name || building.name} from favorites?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
           style: 'destructive',
           onPress: async () => {
-            await removeFavorite(building.building_id);
+            await removeFavorite(building.building_id || building.id);
+            await loadFavorites();
+          },
+        },
+      ]
+    );
+  };
+
+  // Handle remove room favorite
+  const handleRemoveRoomFavorite = (room) => {
+    Alert.alert(
+      'Remove Favorite',
+      `Remove ${room.name} from favorites?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            await removeRoomFavorite(room.id);
             await loadFavorites();
           },
         },
@@ -150,8 +152,35 @@ const FavoritesScreen = ({ navigation, route }) => {
     handleBuildingPress(building);
   };
 
+  // Handle room press - navigate to map
+  const handleRoomPress = (room) => {
+    if (!room.building) {
+      console.warn('Room has no building info');
+      return;
+    }
+
+    navigation.navigate('Map', {
+      selectedLocation: {
+        id: room.building.id,
+        name: room.building.name,
+        code: room.building.code,
+        type: 'building',
+        latitude: room.building.latitude,
+        longitude: room.building.longitude,
+        room: {
+          id: room.id,
+          name: room.name,
+          room_number: room.room_number,
+          floor: room.floor,
+          description: room.description,
+        },
+      },
+    });
+  };
+
   // Loading state
-  if (loading && favoriteBuildings.length === 0) {
+  const totalFavorites = favoriteBuildings.length + favoriteRooms.length;
+  if (loading && totalFavorites === 0) {
     return (
       <LoadingView 
         message="Loading favorites..." 
@@ -162,7 +191,7 @@ const FavoritesScreen = ({ navigation, route }) => {
   }
 
   // Error state (only if we have an error and no favorites)
-  if (errorMessage && favoriteBuildings.length === 0 && !loading) {
+  if (errorMessage && totalFavorites === 0 && !loading) {
     return (
       <ErrorView 
         title="Error Loading Favorites"
@@ -172,32 +201,62 @@ const FavoritesScreen = ({ navigation, route }) => {
     );
   }
 
+  // Combine buildings and rooms for display
+  const combinedFavorites = [
+    ...favoriteBuildings.map(item => ({ ...item, itemType: 'building' })),
+    ...favoriteRooms.map(item => ({ ...item, itemType: 'room' })),
+  ];
+
   return (
     <View style={styles.container}>
-      {favoriteBuildings.length > 0 ? (
+      {totalFavorites > 0 ? (
         <>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerText}>
-              {favoriteBuildings.length} {favoriteBuildings.length === 1 ? 'Favorite' : 'Favorites'}
+              {totalFavorites} {totalFavorites === 1 ? 'Favorite' : 'Favorites'}
+              {favoriteBuildings.length > 0 && ` (${favoriteBuildings.length} ${favoriteBuildings.length === 1 ? 'building' : 'buildings'})`}
+              {favoriteRooms.length > 0 && ` (${favoriteRooms.length} ${favoriteRooms.length === 1 ? 'room' : 'rooms'})`}
             </Text>
           </View>
 
           {/* Favorites List */}
           <FlatList
-            data={favoriteBuildings}
-            keyExtractor={(item) => item.building_id.toString()}
-            renderItem={({ item }) => (
-              <BuildingCard
-                building={item}
-                onPress={() => handleBuildingPress(item)}
-                showFavorite={true}
-                isFavorite={true}
-                onFavoritePress={() => handleRemoveFavorite(item)}
-                showNavigate={true}
-                onNavigatePress={handleNavigatePress}
-              />
-            )}
+            data={combinedFavorites}
+            keyExtractor={(item, index) => {
+              if (item.itemType === 'room') {
+                return `room-${item.id}`;
+              } else {
+                return `building-${item.building_id || item.id || index}`;
+              }
+            }}
+            renderItem={({ item }) => {
+              if (item.itemType === 'room') {
+                return (
+                  <RoomCard
+                    room={item}
+                    onPress={() => handleRoomPress(item)}
+                    showFavorite={true}
+                    isFavorite={true}
+                    onFavoritePress={() => handleRemoveRoomFavorite(item)}
+                    showNavigate={true}
+                    onNavigatePress={handleRoomPress}
+                  />
+                );
+              } else {
+                return (
+                  <BuildingCard
+                    building={item}
+                    onPress={() => handleBuildingPress(item)}
+                    showFavorite={true}
+                    isFavorite={true}
+                    onFavoritePress={() => handleRemoveFavorite(item)}
+                    showNavigate={true}
+                    onNavigatePress={handleNavigatePress}
+                  />
+                );
+              }
+            }}
             contentContainerStyle={styles.listContent}
             refreshControl={
               <RefreshControl
@@ -215,14 +274,14 @@ const FavoritesScreen = ({ navigation, route }) => {
           <Ionicons name="heart-outline" size={80} color={Colors.textLight} />
           <Text style={styles.emptyTitle}>No Favorites Yet</Text>
           <Text style={styles.emptyText}>
-            Start adding buildings to your favorites from the Search or Map screens
+            Start adding buildings and rooms to your favorites from the Search or Map screens
           </Text>
           <TouchableOpacity
             style={styles.searchButton}
             onPress={() => navigation.navigate('Search')}
           >
             <Ionicons name="search" size={20} color={Colors.white} />
-            <Text style={styles.searchButtonText}>Explore Buildings</Text>
+            <Text style={styles.searchButtonText}>Explore Buildings & Rooms</Text>
           </TouchableOpacity>
         </View>
       )}

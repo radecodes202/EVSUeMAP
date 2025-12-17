@@ -62,13 +62,7 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (error) {
-        // Handle email confirmation error with a user-friendly message
-        if (error.message && error.message.includes('email_not_confirmed')) {
-          return { 
-            success: false, 
-            error: 'Please check your email and confirm your account before signing in. If you didn\'t receive an email, check your spam folder or contact support.' 
-          };
-        }
+        // For demo: Email confirmation is disabled, so we don't need special handling
         // Handle other errors
         return { success: false, error: error.message };
       }
@@ -155,14 +149,32 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: 'User creation failed. Please try again.' };
       }
 
-      // Check if email confirmation is required
-      // If user needs to confirm email, they won't have a session yet
+      // For demo: If no session (email confirmation required), automatically sign in
+      // This will work if email confirmation is disabled in Supabase dashboard
       if (!data.session) {
-        return { 
-          success: true, 
-          requiresConfirmation: true,
-          message: 'Account created! Please check your email to confirm your account before signing in.' 
-        };
+        console.log('📧 No session after signup, attempting auto-signin for demo...');
+        // Try to sign in immediately (works if email confirmation is disabled)
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (signInError) {
+          // If sign in fails, email confirmation is likely required
+          // For demo purposes, we'll still proceed but show a message
+          console.warn('⚠️ Auto-signin failed, email confirmation may be required:', signInError.message);
+          return { 
+            success: true, 
+            requiresConfirmation: true,
+            message: 'Account created! Please check your email to confirm your account before signing in.' 
+          };
+        }
+
+        // Auto-signin succeeded, use that session
+        if (signInData.session) {
+          data.session = signInData.session;
+          data.user = signInData.user;
+        }
       }
 
       // Wait a moment for the database trigger to create the user profile

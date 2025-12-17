@@ -7,7 +7,6 @@ import { Colors } from '../constants/theme';
 import LoginScreen from '../screens/LoginScreen';
 import RegisterScreen from '../screens/RegisterScreen';
 import MainNavigator from './MainNavigator';
-import AboutScreen from '../screens/AboutScreen';
 import LoadingView from '../components/LoadingView';
 
 const Stack = createNativeStackNavigator();
@@ -37,19 +36,7 @@ const AuthNavigator = () => {
             />
           </>
         ) : (
-          <>
-            <Stack.Screen name="Main" component={MainNavigator} />
-            <Stack.Screen 
-              name="About" 
-              component={AboutScreen}
-              options={{
-                headerShown: true,
-                headerStyle: { backgroundColor: Colors.primary },
-                headerTintColor: '#fff',
-                headerTitle: 'About',
-              }}
-            />
-          </>
+          <Stack.Screen name="Main" component={MainNavigator} />
         )}
       </Stack.Navigator>
     </NavigationContainer>

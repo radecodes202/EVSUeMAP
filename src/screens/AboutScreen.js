@@ -102,6 +102,26 @@ const AboutScreen = () => {
         </View>
       </View>
 
+      {/* Developers Section */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Developers</Text>
+        <View style={styles.sectionContent}>
+          <DeveloperItem
+            name="Niño Junehll Edar"
+          />
+          <DeveloperItem
+            name="Mark Brua"
+          />
+          <DeveloperItem
+            name="Zhander Jake Bastes"
+          />
+          <View style={styles.developerInfo}>
+            <Text style={styles.developerCourse}>BSIT 3A</Text>
+            <Text style={styles.developerYear}>SY 2025-2026</Text>
+          </View>
+        </View>
+      </View>
+
       {/* Credits */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Credits</Text>
@@ -153,6 +173,15 @@ const InfoItem = ({ icon, label, value, onPress, isLink = false }) => (
   </View>
 );
 
+const DeveloperItem = ({ name }) => (
+  <View style={styles.developerItem}>
+    <View style={styles.developerIcon}>
+      <Ionicons name="person" size={20} color={Colors.primary} />
+    </View>
+    <Text style={styles.developerName}>{name}</Text>
+  </View>
+);
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -161,7 +190,8 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: Colors.background,
     alignItems: 'center',
-    paddingVertical: Spacing.xxxl,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xxxl,
     paddingHorizontal: Spacing.lg,
     marginBottom: Spacing.md,
     ...Shadows.small,
@@ -285,6 +315,45 @@ const styles = StyleSheet.create({
   footerText: {
     ...Typography.bodySmall,
     color: Colors.textLight,
+  },
+  developerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+    paddingBottom: Spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.border,
+  },
+  developerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.backgroundLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: Spacing.md,
+  },
+  developerName: {
+    ...Typography.body,
+    color: Colors.text,
+    fontWeight: '500',
+  },
+  developerInfo: {
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.border,
+    alignItems: 'center',
+  },
+  developerCourse: {
+    ...Typography.body,
+    color: Colors.primary,
+    fontWeight: '600',
+    marginBottom: Spacing.xs,
+  },
+  developerYear: {
+    ...Typography.bodySmall,
+    color: Colors.textSecondary,
   },
 });
 

@@ -2,6 +2,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const FAVORITES_KEY = '@evsuemap_favorites';
+const ROOM_FAVORITES_KEY = '@evsuemap_room_favorites';
 
 /**
  * Get all favorite buildings
@@ -71,6 +72,82 @@ export const isFavorite = async (buildingId) => {
     return favorites.some(favId => String(favId) === id);
   } catch (error) {
     console.error('Error checking favorite:', error);
+    return false;
+  }
+};
+
+// ============================================================================
+// ROOM FAVORITES
+// ============================================================================
+
+/**
+ * Get all favorite rooms
+ * @returns {Promise<Array>} Array of favorite room IDs
+ */
+export const getRoomFavorites = async () => {
+  try {
+    const jsonValue = await AsyncStorage.getItem(ROOM_FAVORITES_KEY);
+    return jsonValue != null ? JSON.parse(jsonValue) : [];
+  } catch (error) {
+    console.error('Error getting room favorites:', error);
+    return [];
+  }
+};
+
+/**
+ * Add a room to favorites
+ * @param {string|number} roomId - Room ID to add
+ * @returns {Promise<boolean>} Success status
+ */
+export const addRoomFavorite = async (roomId) => {
+  try {
+    // Normalize to string for consistent storage
+    const id = String(roomId);
+    const favorites = await getRoomFavorites();
+    if (!favorites.includes(id)) {
+      favorites.push(id);
+      await AsyncStorage.setItem(ROOM_FAVORITES_KEY, JSON.stringify(favorites));
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.error('Error adding room favorite:', error);
+    return false;
+  }
+};
+
+/**
+ * Remove a room from favorites
+ * @param {string|number} roomId - Room ID to remove
+ * @returns {Promise<boolean>} Success status
+ */
+export const removeRoomFavorite = async (roomId) => {
+  try {
+    // Normalize to string for consistent comparison
+    const id = String(roomId);
+    const favorites = await getRoomFavorites();
+    const filtered = favorites.filter(favId => String(favId) !== id);
+    await AsyncStorage.setItem(ROOM_FAVORITES_KEY, JSON.stringify(filtered));
+    return true;
+  } catch (error) {
+    console.error('Error removing room favorite:', error);
+    return false;
+  }
+};
+
+/**
+ * Check if a room is favorited
+ * @param {string|number} roomId - Room ID to check
+ * @returns {Promise<boolean>} True if favorited
+ */
+export const isRoomFavorite = async (roomId) => {
+  try {
+    // Normalize to string for consistent comparison
+    const id = String(roomId);
+    const favorites = await getRoomFavorites();
+    return favorites.some(favId => String(favId) === id);
+  } catch (error) {
+    console.error('Error checking room favorite:', error);
     return false;
   }
 };

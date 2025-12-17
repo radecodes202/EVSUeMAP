@@ -1,6 +1,6 @@
 // src/navigation/MainNavigator.js - Main tab navigation
 import React from 'react';
-import { TouchableOpacity, Alert } from 'react-native';
+import { TouchableOpacity, Alert, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -9,10 +9,9 @@ import { Colors } from '../constants/theme';
 // Import screens
 import MapScreen from '../screens/MapScreen';
 import SearchScreen from '../screens/SearchScreen';
-import ChatbotScreen from '../screens/ChatbotScreen';
+// import ChatbotScreen from '../screens/ChatbotScreen'; // Temporarily hidden - not functional yet
 import FavoritesScreen from '../screens/FavoritesScreen';
 import SettingsNavigator from './SettingsNavigator';
-import AboutScreen from '../screens/AboutScreen';
 
 const Tab = createBottomTabNavigator();
 
@@ -50,6 +49,7 @@ const MainNavigator = () => {
           shadowOpacity: 0,
         },
         headerTintColor: '#fff',
+        headerBackTitleVisible: false,
         headerTitleStyle: {
           fontWeight: 'bold',
           fontSize: 18,
@@ -81,14 +81,17 @@ const MainNavigator = () => {
           );
         },
         tabBarStyle: {
-          height: 100,
-          paddingBottom: 12,
+          height: Platform.OS === 'ios' ? 60 : 60,
+          paddingBottom: Platform.OS === 'ios' ? 5 : 0,
           paddingTop: 8,
           elevation: 8,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.1,
           shadowRadius: 4,
+        },
+        tabBarSafeAreaInsets: {
+          bottom: 0,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -109,11 +112,12 @@ const MainNavigator = () => {
         component={SearchScreen}
         options={{ title: 'Search Campus' }}
       />
-      <Tab.Screen 
+      {/* Chatbot screen temporarily hidden - not functional yet */}
+      {/* <Tab.Screen 
         name="Chatbot" 
         component={ChatbotScreen}
         options={{ title: 'AI Assistant' }}
-      />
+      /> */}
       <Tab.Screen 
         name="Favorites" 
         component={FavoritesScreen}

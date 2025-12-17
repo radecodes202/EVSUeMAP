@@ -15,6 +15,25 @@ export const BUILDING_CATEGORIES_WITH_ALL = [
   ...BUILDING_CATEGORIES,
 ];
 
+// Room type categories
+export const ROOM_TYPES = [
+  { label: 'Classroom', value: 'classroom' },
+  { label: 'Laboratory', value: 'laboratory' },
+  { label: 'Office', value: 'office' },
+  { label: 'Library', value: 'library' },
+  { label: 'Conference Room', value: 'conference' },
+  { label: 'Computer Lab', value: 'computer_lab' },
+  { label: 'Workshop', value: 'workshop' },
+  { label: 'Storage', value: 'storage' },
+  { label: 'Restroom', value: 'restroom' },
+  { label: 'Other', value: 'other' },
+];
+
+export const ROOM_TYPES_WITH_ALL = [
+  { label: 'All Types', value: '' },
+  ...ROOM_TYPES,
+];
+
 /**
  * Get category label by value
  * @param {string} value - Category value

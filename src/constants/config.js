@@ -11,10 +11,10 @@ export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000
 
 // EVSU Tacloban Campus center coordinates
 export const EVSU_CENTER = {
-  latitude: 11.239173,
-  longitude: 124.997,
-  latitudeDelta: 0.01,
-  longitudeDelta: 0.01,
+  latitude: 11.23970,
+  longitude: 124.99750,
+  latitudeDelta: 0.003,
+  longitudeDelta: 0.003,
 };
 
 // Define campus boundaries (users can't scroll outside this area)

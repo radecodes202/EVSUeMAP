@@ -2,6 +2,7 @@
 import React, { useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Linking, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './src/context/AuthContext';
 import AuthNavigator from './src/navigation/AuthNavigator';
 import { supabase } from './src/lib/supabase';
@@ -67,11 +68,11 @@ export default function App() {
   }, []);
 
   return (
-    <>
+    <SafeAreaProvider>
       <StatusBar style="light" />
       <AuthProvider>
         <AuthNavigator />
       </AuthProvider>
-    </>
+    </SafeAreaProvider>
   );
 }

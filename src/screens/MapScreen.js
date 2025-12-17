@@ -44,6 +44,8 @@ const MapScreen = ({ navigation, route }) => {
   const [paths, setPaths] = useState([]);
   const [mapType, setMapType] = useState('standard');
   const [roomCount, setRoomCount] = useState(0);
+  const [showMarkers, setShowMarkers] = useState(true);
+  const [isUserInitiatedMove, setIsUserInitiatedMove] = useState(false);
   
   // Convert meters to approximate lat/lng degrees (1 degree ≈ 111,320 meters at equator)
   const metersToLatDegrees = (meters) => meters / 111320;
@@ -186,6 +188,7 @@ const MapScreen = ({ navigation, route }) => {
     setSelectedLocation(location);
     
     // Animate map to the location
+    setIsUserInitiatedMove(true);
     if (mapRef.current) {
       mapRef.current.animateToRegion({
         latitude: parseFloat(location.latitude),
@@ -194,6 +197,9 @@ const MapScreen = ({ navigation, route }) => {
         longitudeDelta: MAP_ZOOM_DELTA,
       }, MAP_ANIMATION_DURATION);
     }
+    setTimeout(() => {
+      setIsUserInitiatedMove(false);
+    }, MAP_ANIMATION_DURATION + 100);
 
     // Calculate route if user location is available
     if (userLocation) {
@@ -269,11 +275,16 @@ const MapScreen = ({ navigation, route }) => {
     
     if (userLocation && mapRef.current) {
       console.log('Centering on user location');
+      setIsUserInitiatedMove(true); // Allow centering even outside campus
       mapRef.current.animateToRegion({
         ...userLocation,
         latitudeDelta: MAP_ZOOM_DELTA,
         longitudeDelta: MAP_ZOOM_DELTA,
       }, MAP_ANIMATION_DURATION);
+      // Reset flag after animation completes
+      setTimeout(() => {
+        setIsUserInitiatedMove(false);
+      }, MAP_ANIMATION_DURATION + 100);
     } else {
       Alert.alert('Location', 'Getting your location...');
     }
@@ -293,14 +304,34 @@ const MapScreen = ({ navigation, route }) => {
   };
 
   // Handle region change - keep map within campus boundaries
+  // But allow user-initiated moves (like centering on location)
   const handleRegionChangeComplete = (region) => {
+    // Don't enforce boundaries if user is intentionally moving (e.g., centering on location)
+    if (isUserInitiatedMove) {
+      setMapRegion(region);
+      return;
+    }
+    
     // Allow some panning but keep focus on campus
-    // If user pans too far, gently guide back
+    // If user pans too far, gently guide back (but only if not user-initiated)
     if (!isWithinCampusBounds(region)) {
-      // Snap back to campus center if outside boundaries
-      setMapRegion(EVSU_CENTER);
-      if (mapRef.current) {
-        mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
+      // Only snap back if it's not a user-initiated action
+      // This allows users to view areas outside campus when they intentionally navigate there
+      const distanceFromCampus = Math.sqrt(
+        Math.pow(region.latitude - EVSU_CENTER.latitude, 2) +
+        Math.pow(region.longitude - EVSU_CENTER.longitude, 2)
+      );
+      
+      // Only snap back if user is very far from campus (more than 0.1 degrees away)
+      // This gives users some freedom to explore while still keeping focus on campus
+      if (distanceFromCampus > 0.1) {
+        setMapRegion(EVSU_CENTER);
+        if (mapRef.current) {
+          mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
+        }
+      } else {
+        // Allow some movement outside campus, just update the region
+        setMapRegion(region);
       }
     } else {
       // Update region if within bounds
@@ -311,10 +342,13 @@ const MapScreen = ({ navigation, route }) => {
   // Center map on campus
   const centerOnCampus = () => {
     console.log('Centering on campus');
-    setMapRegion(EVSU_CENTER);
+    setIsUserInitiatedMove(true);
     if (mapRef.current) {
       mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
     }
+    setTimeout(() => {
+      setIsUserInitiatedMove(false);
+    }, MAP_ANIMATION_DURATION + 100);
   };
 
   // Clear route and selection
@@ -498,11 +532,9 @@ const MapScreen = ({ navigation, route }) => {
         provider={PROVIDER_DEFAULT}
         style={styles.map}
         initialRegion={EVSU_CENTER}
-        region={mapRegion}
         onRegionChangeComplete={handleRegionChangeComplete}
         onMapReady={() => {
           // Ensure map is centered on campus when ready
-          setMapRegion(EVSU_CENTER);
           if (mapRef.current) {
             mapRef.current.animateToRegion(EVSU_CENTER, MAP_ANIMATION_DURATION);
           }
@@ -553,7 +585,7 @@ const MapScreen = ({ navigation, route }) => {
         ))}
 
         {/* Building Markers */}
-        {buildings.map((building) => (
+        {showMarkers && buildings.map((building) => (
           <Marker
             key={building.building_id || building.id || `building-${building.latitude}-${building.longitude}`}
             coordinate={{
@@ -615,6 +647,12 @@ const MapScreen = ({ navigation, route }) => {
           }}
         />
         
+        <ControlButton 
+          iconName={showMarkers ? "location" : "location-outline"} 
+          onPress={() => setShowMarkers(!showMarkers)}
+          backgroundColor={showMarkers ? Colors.primary : Colors.gray}
+        />
+        
         {routeCoordinates.length > 0 && (
           <ControlButton 
             iconName="close" 
@@ -662,7 +700,7 @@ const styles = StyleSheet.create({
   },
   controls: {
     position: 'absolute',
-    top: Spacing.xl,
+    top: Spacing.xxl + Spacing.md,
     right: Spacing.xl,
     gap: Spacing.md,
     zIndex: 1000,

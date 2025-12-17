@@ -20,7 +20,7 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants
 
 // Utils
 import { getErrorMessage } from '../utils/errorHandler';
-import { getFavorites, addFavorite, removeFavorite } from '../utils/storage';
+import { getFavorites, addFavorite, removeFavorite, getRoomFavorites, addRoomFavorite, removeRoomFavorite } from '../utils/storage';
 import { mockBuildings } from '../utils/mockData';
 import { mapService } from '../services/mapService';
 
@@ -32,7 +32,7 @@ import ErrorView from '../components/ErrorView';
 import CategoryPicker from '../components/CategoryPicker';
 
 // Constants
-import { BUILDING_CATEGORIES_WITH_ALL } from '../constants/categories';
+import { BUILDING_CATEGORIES_WITH_ALL, ROOM_TYPES_WITH_ALL } from '../constants/categories';
 
 const SearchScreen = () => {
   const navigation = useNavigation();
@@ -45,9 +45,11 @@ const SearchScreen = () => {
   const [searching, setSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [userLocation, setUserLocation] = useState(null);
-  const [categoryFilter, setCategoryFilter] = useState(''); // Empty string = show all (matches admin panel)
+  const [categoryFilter, setCategoryFilter] = useState(''); // Empty string = show all (for buildings)
+  const [roomTypeFilter, setRoomTypeFilter] = useState(''); // Empty string = show all (for rooms)
   const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'buildings', 'rooms'
   const [favoriteIds, setFavoriteIds] = useState([]);
+  const [favoriteRoomIds, setFavoriteRoomIds] = useState([]);
 
   // Fetch buildings on mount
   useEffect(() => {
@@ -59,16 +61,18 @@ const SearchScreen = () => {
   // Load favorites
   const loadFavorites = async () => {
     try {
-      const favorites = await getFavorites();
-      setFavoriteIds(favorites);
+      const buildingFavorites = await getFavorites();
+      const roomFavorites = await getRoomFavorites();
+      setFavoriteIds(buildingFavorites);
+      setFavoriteRoomIds(roomFavorites);
     } catch (error) {
       console.error('Error loading favorites:', error);
     }
   };
 
-  // Handle favorite toggle
+  // Handle favorite toggle for buildings
   const handleFavoritePress = async (building) => {
-    const buildingId = building.building_id.toString();
+    const buildingId = (building.building_id || building.id).toString();
     const isFav = favoriteIds.includes(buildingId);
     
     if (isFav) {
@@ -79,16 +83,27 @@ const SearchScreen = () => {
     await loadFavorites();
   };
 
+  // Handle favorite toggle for rooms
+  const handleRoomFavoritePress = async (room) => {
+    const roomId = room.id.toString();
+    const isFav = favoriteRoomIds.includes(roomId);
+    
+    if (isFav) {
+      await removeRoomFavorite(roomId);
+    } else {
+      await addRoomFavorite(roomId);
+    }
+    await loadFavorites();
+  };
+
   // Fetch or search rooms when search query or type filter changes
   useEffect(() => {
     if (typeFilter === 'rooms' || typeFilter === 'all') {
       if (searchQuery.trim()) {
         searchRooms();
-      } else if (typeFilter === 'rooms') {
-        // If rooms filter is selected but no search query, fetch all rooms
-        fetchAllRooms();
       } else {
-        setFilteredRooms([]);
+        // If rooms or all filter is selected but no search query, fetch all rooms
+        fetchAllRooms();
       }
     } else {
       setFilteredRooms([]);
@@ -99,6 +114,11 @@ const SearchScreen = () => {
   useEffect(() => {
     filterBuildings();
   }, [searchQuery, categoryFilter, buildings]);
+
+  // Filter rooms when search query or room type filter changes
+  useEffect(() => {
+    filterRooms();
+  }, [searchQuery, roomTypeFilter, rooms]);
 
   // Request location permission
   const requestLocationPermission = async () => {
@@ -158,11 +178,11 @@ const SearchScreen = () => {
       const roomsData = await mapService.getRooms();
       console.log('✅ All rooms fetched:', roomsData.length);
       setRooms(roomsData);
-      setFilteredRooms(roomsData);
+      // filterRooms will be called automatically via useEffect
       setSearching(false);
     } catch (error) {
       console.error('Error fetching rooms:', error);
-      setFilteredRooms([]);
+      setRooms([]);
       setSearching(false);
     }
   };
@@ -173,7 +193,7 @@ const SearchScreen = () => {
       setSearching(true);
       const query = searchQuery.trim();
       if (!query) {
-        setFilteredRooms([]);
+        setRooms([]);
         setSearching(false);
         return;
       }
@@ -181,11 +201,11 @@ const SearchScreen = () => {
       const roomsData = await mapService.searchRooms(query);
       console.log('✅ Rooms found:', roomsData.length);
       setRooms(roomsData);
-      setFilteredRooms(roomsData);
+      // filterRooms will be called automatically via useEffect
       setSearching(false);
     } catch (error) {
       console.error('Error searching rooms:', error);
-      setFilteredRooms([]);
+      setRooms([]);
       setSearching(false);
     }
   };
@@ -221,6 +241,37 @@ const SearchScreen = () => {
     }
 
     setFilteredBuildings(filtered);
+  };
+
+  // Filter rooms based on search query and room type filter
+  const filterRooms = () => {
+    let filtered = [...rooms];
+
+    // Apply room type filter (empty string = show all)
+    if (roomTypeFilter) {
+      filtered = filtered.filter(room => {
+        const roomType = room.type || '';
+        return roomType.toLowerCase() === roomTypeFilter.toLowerCase();
+      });
+    }
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(room => {
+        const name = room.name || '';
+        const roomNumber = room.room_number || '';
+        const description = room.description || '';
+        
+        return (
+          name.toLowerCase().includes(query) ||
+          roomNumber.toLowerCase().includes(query) ||
+          description.toLowerCase().includes(query)
+        );
+      });
+    }
+
+    setFilteredRooms(filtered);
   };
 
   // Handle building selection
@@ -374,16 +425,28 @@ const SearchScreen = () => {
           </View>
         </View>
 
-        {/* Category Filter */}
+        {/* Category Filter - Show building categories for buildings/all, room types for rooms */}
         <View style={styles.filterContainer}>
-          <CategoryPicker
-            selectedValue={categoryFilter}
-            onValueChange={setCategoryFilter}
-            label="Filter by Category"
-            showLabel={true}
-            accessibilityLabel="Filter buildings by category"
-            accessibilityHint="Select a category to filter the building list, or select All Categories to show all buildings"
-          />
+          {typeFilter === 'rooms' ? (
+            <CategoryPicker
+              selectedValue={roomTypeFilter}
+              onValueChange={setRoomTypeFilter}
+              label="Filter by Room Type"
+              showLabel={true}
+              categories={ROOM_TYPES_WITH_ALL}
+              accessibilityLabel="Filter rooms by type"
+              accessibilityHint="Select a room type to filter the room list, or select All Types to show all rooms"
+            />
+          ) : (
+            <CategoryPicker
+              selectedValue={categoryFilter}
+              onValueChange={setCategoryFilter}
+              label="Filter by Category"
+              showLabel={true}
+              accessibilityLabel="Filter buildings by category"
+              accessibilityHint="Select a category to filter the building list, or select All Categories to show all buildings"
+            />
+          )}
         </View>
       </View>
 
@@ -440,6 +503,8 @@ const SearchScreen = () => {
           }}
           renderItem={({ item }) => {
             if (item.itemType === 'room') {
+              const roomId = item.id?.toString();
+              const isRoomFavorite = favoriteRoomIds.includes(roomId);
               return (
                 <RoomCard
                   room={item}
@@ -448,6 +513,9 @@ const SearchScreen = () => {
                   userLocation={userLocation}
                   showNavigate={true}
                   onNavigatePress={handleRoomPress}
+                  showFavorite={true}
+                  isFavorite={isRoomFavorite}
+                  onFavoritePress={handleRoomFavoritePress}
                 />
               );
             } else {

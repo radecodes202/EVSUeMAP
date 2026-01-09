@@ -8,7 +8,9 @@ import {
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
+import InfoBox from '../components/InfoBox';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import axios from 'axios';
@@ -21,8 +23,10 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants
 // Utils
 import { getErrorMessage } from '../utils/errorHandler';
 import { getFavorites, addFavorite, removeFavorite, getRoomFavorites, addRoomFavorite, removeRoomFavorite } from '../utils/storage';
+import { logBuildingNavigation, logRoomNavigation } from '../utils/navigationTracking';
 import { mockBuildings } from '../utils/mockData';
 import { mapService } from '../services/mapService';
+import { useAuth } from '../context/AuthContext';
 
 // Components
 import BuildingCard from '../components/BuildingCard';
@@ -36,6 +40,7 @@ import { BUILDING_CATEGORIES_WITH_ALL, ROOM_TYPES_WITH_ALL } from '../constants/
 
 const SearchScreen = () => {
   const navigation = useNavigation();
+  const { user, isAuthenticated } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [buildings, setBuildings] = useState([]);
   const [rooms, setRooms] = useState([]);
@@ -50,6 +55,7 @@ const SearchScreen = () => {
   const [typeFilter, setTypeFilter] = useState('all'); // 'all', 'buildings', 'rooms'
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [favoriteRoomIds, setFavoriteRoomIds] = useState([]);
+  const [showInfoBox, setShowInfoBox] = useState(false);
 
   // Fetch buildings on mount
   useEffect(() => {
@@ -70,10 +76,31 @@ const SearchScreen = () => {
     }
   };
 
+  // Check if user can use favorites
+  const canUseFavorites = () => {
+    if (!isAuthenticated || !user) {
+      return false;
+    }
+    // Check if user is a guest (guests have role 'guest' or id 0)
+    if (user.role === 'guest' || user.id === 0) {
+      return false;
+    }
+    return true;
+  };
+
   // Handle favorite toggle for buildings
   const handleFavoritePress = async (building) => {
-    const buildingId = (building.building_id || building.id).toString();
-    const isFav = favoriteIds.includes(buildingId);
+    // Check if user can use favorites
+    if (!canUseFavorites()) {
+      setShowInfoBox(true);
+      return;
+    }
+
+    const buildingId = building.building_id || building.id;
+    // Normalize ID to string for comparison (handles UUIDs and numbers)
+    const normalizedId = String(buildingId);
+    const normalizedFavoriteIds = favoriteIds.map(id => String(id));
+    const isFav = normalizedFavoriteIds.includes(normalizedId);
     
     if (isFav) {
       await removeFavorite(buildingId);
@@ -85,8 +112,17 @@ const SearchScreen = () => {
 
   // Handle favorite toggle for rooms
   const handleRoomFavoritePress = async (room) => {
-    const roomId = room.id.toString();
-    const isFav = favoriteRoomIds.includes(roomId);
+    // Check if user can use favorites
+    if (!canUseFavorites()) {
+      setShowInfoBox(true);
+      return;
+    }
+
+    const roomId = room.id;
+    // Normalize ID to string for comparison (handles UUIDs and numbers)
+    const normalizedId = String(roomId);
+    const normalizedFavoriteIds = favoriteRoomIds.map(id => String(id));
+    const isFav = normalizedFavoriteIds.includes(normalizedId);
     
     if (isFav) {
       await removeRoomFavorite(roomId);
@@ -275,7 +311,23 @@ const SearchScreen = () => {
   };
 
   // Handle building selection
-  const handleBuildingPress = (building) => {
+  const handleBuildingPress = async (building) => {
+    // Calculate distance if user location is available
+    let distanceMeters = null;
+    if (userLocation && building.latitude && building.longitude) {
+      const R = 6371000; // Earth radius in meters
+      const dLat = (building.latitude - userLocation.latitude) * Math.PI / 180;
+      const dLng = (building.longitude - userLocation.longitude) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(userLocation.latitude * Math.PI / 180) * Math.cos(building.latitude * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      distanceMeters = R * c;
+    }
+
+    // Log navigation event
+    await logBuildingNavigation(building, userLocation, distanceMeters, false);
+
     navigation.navigate('Map', {
       selectedLocation: {
         id: building.building_id || building.id,
@@ -290,11 +342,27 @@ const SearchScreen = () => {
   };
 
   // Handle room selection - navigate to building with room info
-  const handleRoomPress = (room) => {
+  const handleRoomPress = async (room) => {
     if (!room.building) {
       console.warn('Room has no building info');
       return;
     }
+
+    // Calculate distance if user location is available
+    let distanceMeters = null;
+    if (userLocation && room.building.latitude && room.building.longitude) {
+      const R = 6371000; // Earth radius in meters
+      const dLat = (room.building.latitude - userLocation.latitude) * Math.PI / 180;
+      const dLng = (room.building.longitude - userLocation.longitude) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(userLocation.latitude * Math.PI / 180) * Math.cos(room.building.latitude * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      distanceMeters = R * c;
+    }
+
+    // Log navigation event
+    await logRoomNavigation(room, room.building, userLocation, distanceMeters, false);
 
     navigation.navigate('Map', {
       selectedLocation: {
@@ -503,8 +571,11 @@ const SearchScreen = () => {
           }}
           renderItem={({ item }) => {
             if (item.itemType === 'room') {
-              const roomId = item.id?.toString();
-              const isRoomFavorite = favoriteRoomIds.includes(roomId);
+              const roomId = item.id;
+              // Normalize ID comparison for UUIDs
+              const normalizedRoomId = roomId ? String(roomId) : null;
+              const normalizedFavoriteIds = favoriteRoomIds.map(id => String(id));
+              const isRoomFavorite = normalizedRoomId ? normalizedFavoriteIds.includes(normalizedRoomId) : false;
               return (
                 <RoomCard
                   room={item}
@@ -519,6 +590,11 @@ const SearchScreen = () => {
                 />
               );
             } else {
+              const buildingId = item.building_id || item.id;
+              // Normalize ID comparison for UUIDs
+              const normalizedBuildingId = buildingId ? String(buildingId) : null;
+              const normalizedFavoriteIds = favoriteIds.map(id => String(id));
+              const isBuildingFavorite = normalizedBuildingId ? normalizedFavoriteIds.includes(normalizedBuildingId) : false;
               return (
                 <BuildingCard
                   building={item}
@@ -526,7 +602,7 @@ const SearchScreen = () => {
                   showDistance={!!userLocation}
                   userLocation={userLocation}
                   showFavorite={true}
-                  isFavorite={favoriteIds.includes(item.building_id?.toString() || item.id?.toString()) || favoriteIds.includes(item.building_id || item.id)}
+                  isFavorite={isBuildingFavorite}
                   onFavoritePress={handleFavoritePress}
                   showNavigate={true}
                   onNavigatePress={handleBuildingPress}
@@ -555,6 +631,21 @@ const SearchScreen = () => {
           </View>
         );
       })()}
+      
+      {/* Info Box for Login Required */}
+      <InfoBox
+        visible={showInfoBox}
+        title="Login Required"
+        message="In order to use favorites, please log in."
+        onClose={() => setShowInfoBox(false)}
+        onAction={() => {
+          setShowInfoBox(false);
+          navigation.navigate('Settings');
+        }}
+        actionText="Go to Login"
+        icon="log-in-outline"
+        type="info"
+      />
     </View>
   );
 };

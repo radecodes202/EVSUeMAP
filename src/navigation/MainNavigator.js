@@ -82,9 +82,9 @@ const MainNavigator = () => {
         },
         tabBarStyle: {
           height: Platform.OS === 'ios' ? 60 : 60,
-          paddingBottom: Platform.OS === 'ios' ? 5 : 0,
+          paddingBottom: Platform.OS === 'ios' ? 5 : 5,
           paddingTop: 8,
-          elevation: 8,
+          elevation: 10,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.1,

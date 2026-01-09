@@ -23,6 +23,7 @@ import { Colors, Spacing, Shadows } from '../constants/theme';
 import { calculateDistance, calculateWalkingTime } from '../utils/distance';
 import { calculateRoute as getRoute, getRouteSummary } from '../utils/routing';
 import { getErrorMessage } from '../utils/errorHandler';
+import { logBuildingNavigation, logRoomNavigation } from '../utils/navigationTracking';
 import { mockBuildings } from '../utils/mockData';
 import { mapService } from '../services/mapService';
 
@@ -187,6 +188,33 @@ const MapScreen = ({ navigation, route }) => {
     console.log('Setting selected location:', location);
     setSelectedLocation(location);
     
+    // Calculate distance if user location is available
+    let distanceMeters = null;
+    if (userLocation && location.latitude && location.longitude) {
+      distanceMeters = calculateDistance(userLocation, {
+        latitude: parseFloat(location.latitude),
+        longitude: parseFloat(location.longitude),
+      }) * 1000; // Convert km to meters
+    }
+
+    // Log navigation event
+    if (location.type === 'building') {
+      await logBuildingNavigation(
+        { id: location.id, building_id: location.id, latitude: location.latitude, longitude: location.longitude },
+        userLocation,
+        distanceMeters,
+        false
+      );
+    } else if (location.room) {
+      await logRoomNavigation(
+        location.room,
+        { id: location.id, building_id: location.id, latitude: location.latitude, longitude: location.longitude },
+        userLocation,
+        distanceMeters,
+        false
+      );
+    }
+    
     // Animate map to the location
     setIsUserInitiatedMove(true);
     if (mapRef.current) {
@@ -225,6 +253,27 @@ const MapScreen = ({ navigation, route }) => {
         
         // Get formatted summary
         const summary = getRouteSummary(routeData);
+        
+        // Log navigation with route calculated
+        if (selectedLocation) {
+          const distanceMeters = routeData.distance ? routeData.distance * 1000 : null; // Convert km to meters
+          if (selectedLocation.type === 'building') {
+            await logBuildingNavigation(
+              { id: selectedLocation.id, building_id: selectedLocation.id, latitude: selectedLocation.latitude, longitude: selectedLocation.longitude },
+              start,
+              distanceMeters,
+              true // Route was calculated
+            );
+          } else if (selectedLocation.room) {
+            await logRoomNavigation(
+              selectedLocation.room,
+              { id: selectedLocation.id, building_id: selectedLocation.id, latitude: selectedLocation.latitude, longitude: selectedLocation.longitude },
+              start,
+              distanceMeters,
+              true // Route was calculated
+            );
+          }
+        }
         
         if (routeData.isCustomPath) {
           // Successfully using custom path

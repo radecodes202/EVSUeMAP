@@ -17,8 +17,10 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../constants
 
 // Utils
 import { getFavorites, removeFavorite, getRoomFavorites, removeRoomFavorite } from '../utils/storage';
+import { logBuildingNavigation, logRoomNavigation } from '../utils/navigationTracking';
 import { getErrorMessage } from '../utils/errorHandler';
 import { mapService } from '../services/mapService';
+import { useAuth } from '../context/AuthContext';
 
 // Components
 import BuildingCard from '../components/BuildingCard';
@@ -27,6 +29,7 @@ import LoadingView from '../components/LoadingView';
 import ErrorView from '../components/ErrorView';
 
 const FavoritesScreen = ({ navigation, route }) => {
+  const { user, isAuthenticated } = useAuth();
   const [favoriteIds, setFavoriteIds] = useState([]);
   const [favoriteRoomIds, setFavoriteRoomIds] = useState([]);
   const [favoriteBuildings, setFavoriteBuildings] = useState([]);
@@ -34,6 +37,18 @@ const FavoritesScreen = ({ navigation, route }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // Check if user can use favorites
+  const canUseFavorites = () => {
+    if (!isAuthenticated || !user) {
+      return false;
+    }
+    // Check if user is a guest (guests have role 'guest' or id 0)
+    if (user.role === 'guest' || user.id === 0) {
+      return false;
+    }
+    return true;
+  };
 
   // Load favorites when screen is focused
   useFocusEffect(
@@ -59,7 +74,10 @@ const FavoritesScreen = ({ navigation, route }) => {
         const allBuildings = await mapService.getBuildings();
         const favorites = allBuildings.filter(building => {
           const buildingId = building.building_id || building.id;
-          return buildingIds.includes(buildingId.toString()) || buildingIds.includes(buildingId);
+          // Normalize both IDs to strings for comparison (handles UUIDs and numbers)
+          const normalizedBuildingId = String(buildingId);
+          const normalizedFavoriteIds = buildingIds.map(id => String(id));
+          return normalizedFavoriteIds.includes(normalizedBuildingId);
         });
         setFavoriteBuildings(favorites);
       } else {
@@ -71,7 +89,10 @@ const FavoritesScreen = ({ navigation, route }) => {
         const allRooms = await mapService.getRooms();
         const favorites = allRooms.filter(room => {
           const roomId = room.id;
-          return roomIds.includes(roomId.toString()) || roomIds.includes(roomId);
+          // Normalize both IDs to strings for comparison (handles UUIDs and numbers)
+          const normalizedRoomId = String(roomId);
+          const normalizedFavoriteIds = roomIds.map(id => String(id));
+          return normalizedFavoriteIds.includes(normalizedRoomId);
         });
         setFavoriteRooms(favorites);
       } else {
@@ -133,7 +154,10 @@ const FavoritesScreen = ({ navigation, route }) => {
   };
 
   // Handle building press - navigate to map
-  const handleBuildingPress = (building) => {
+  const handleBuildingPress = async (building) => {
+    // Log navigation event (distance will be calculated on MapScreen if user location available)
+    await logBuildingNavigation(building, null, null, false);
+
     navigation.navigate('Map', {
       selectedLocation: {
         id: building.building_id,
@@ -153,11 +177,14 @@ const FavoritesScreen = ({ navigation, route }) => {
   };
 
   // Handle room press - navigate to map
-  const handleRoomPress = (room) => {
+  const handleRoomPress = async (room) => {
     if (!room.building) {
       console.warn('Room has no building info');
       return;
     }
+
+    // Log navigation event (distance will be calculated on MapScreen if user location available)
+    await logRoomNavigation(room, room.building, null, null, false);
 
     navigation.navigate('Map', {
       selectedLocation: {
@@ -177,6 +204,30 @@ const FavoritesScreen = ({ navigation, route }) => {
       },
     });
   };
+
+  // Check if user can use favorites - show message if not
+  if (!canUseFavorites()) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.emptyContainer}>
+          <Ionicons name="lock-closed" size={80} color={Colors.textLight} />
+          <Text style={styles.emptyTitle}>Login Required</Text>
+          <Text style={styles.emptyText}>
+            {!isAuthenticated 
+              ? 'You must be logged in to view and manage favorites.'
+              : 'Guest users cannot save favorites. Please log in with a regular account to use this feature.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.searchButton}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Ionicons name="log-in" size={20} color={Colors.white} />
+            <Text style={styles.searchButtonText}>Go to Login</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   // Loading state
   const totalFavorites = favoriteBuildings.length + favoriteRooms.length;
